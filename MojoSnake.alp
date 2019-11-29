@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="MojoSnake" board="Mojo" language="Lucid" version="2">
+  <files>
+    <component>cclk_detector.luc</component>
+    <component>reg_interface.luc</component>
+    <src>hex_add.luc</src>
+    <src>vga_0816_rom.luc</src>
+    <src>snake_fsm.luc</src>
+    <component>uart_rx.luc</component>
+    <src>game_overlay.luc</src>
+    <src>vram_cga.luc</src>
+    <component>counter.luc</component>
+    <src>vga_0816_rom_cga.luc</src>
+    <component>spi_slave.luc</component>
+    <component>sdram.luc</component>
+    <component>memory_bus.luc</component>
+    <component>reset_conditioner.luc</component>
+    <src>game_ram.luc</src>
+    <src top="true">mojo_top.luc</src>
+    <src>hex_cmp.luc</src>
+    <component>avr_interface.luc</component>
+    <src>alu_simple.luc</src>
+    <src>serial_to_vga.luc</src>
+    <src>vram.luc</src>
+    <component>simple_dual_ram.v</component>
+    <src>vga_cga.luc</src>
+    <component>pwm.luc</component>
+    <src>Direction_LUT.luc</src>
+    <src>hex_boole.luc</src>
+    <src>hex_shift.luc</src>
+    <component>decoder.luc</component>
+    <src>vga_0816_rom_007f.luc</src>
+    <src>vga.luc</src>
+    <src>FA.luc</src>
+    <component>uart_tx.luc</component>
+    <component>pn_gen.luc</component>
+    <component>simple_ram.v</component>
+    <src>vga_0816_rom_80ff.luc</src>
+    <component>edge_detector.luc</component>
+    <constraint>clk_divider.ucf</constraint>
+    <constraint>VGA.ucf</constraint>
+    <constraint lib="true">mojo.ucf</constraint>
+    <core name="xfft_v7_1">
+      <src>..\xfft_v7_1.ngc</src>
+      <src>..\xfft_v7_1.v</src>
+    </core>
+    <core name="vram_8030">
+      <src>..\vram_8030.ngc</src>
+      <src>..\vram_8030.v</src>
+    </core>
+    <core name="clk_divider">
+      <src>..\clk_divider.v</src>
+      <src>..\clk_divider.xco</src>
+    </core>
+  </files>
+</project>

@@ -1,0 +1,147 @@
+module snake_fsm (
+    input clk,  // clock
+    input rst,  // reset
+    input left_button,
+    input right_button,
+    input up_button,
+    input down_button    
+  ) {
+  
+  .clk(clk){
+    .rst(rst){
+      
+      dff input_counter[25]; // Duration to wait for user input
+      dff user_input[16]; // Register to store user inputs
+      dff head_address[16]; // Register to store the address of the head
+      dff tail_address[16]; // Register to store the address of the tail
+      dff block_state[16]; // Register to store state of the next block
+      dff direction[16]; // Register to store current direction
+      fsm state = {START_SCREEN, WAIT_INPUT, COMPARE_STATE, KEEP_LENGTH, GROW, GAMEOVER};
+      
+    }
+  }
+  
+  simple_ram disp_game_mem(
+    #SIZE(16), 
+    #DEPTH(952), 
+    .clk(clk),
+    .write_en(ram_wr_en),
+    .write_data(ram_wr_data),
+    .write_addr(ram_wr_addr),
+    .read_addr(ram_rd_addr),
+  );  
+  
+  sig ram_wr_en;
+  sig ram_wr_addr;
+  sig ram_wr_data;
+  sig ram_rd_addr;
+
+  
+  const START_POS = 10d475;
+  
+  pn_gen random(
+    .clk(clk),
+    .rst(rst),
+    .seed(32h0)      //not used
+  );
+  
+  decoder decoder(
+    #WIDTH(4),
+    .in(random.num[31:28])
+  );
+  
+  direction_lut direction_lut; 
+  alu_simple alu;
+  
+  always {
+    case(state.q){
+        state.START_SCREEN:
+            random.next = 1;
+            head_address.d = START_POS;
+            if(left_button | right_button | up_button | down_button){
+                 state.d = state.WAIT_INPUT; 
+                 direction.d = decoder.out;
+            }
+           
+        state.WAIT_INPUT:
+            if(input_counter.q == 25000000){
+                //user_input.d = c{12h0, left_button, right_button, up_button, down_button};
+                direction_lut.dir_state = c{left_button, right_button, up_button, down_button,direction.q[3:0]};
+                if(direction_lut.travel_dir != 4b0000){ // Only update new direction if the user press something
+                    // Compare old and new direction
+                    direction.d = c{12h0, direction_lut.travel_dir};
+                }
+          
+                // Compute location of next head block
+                alu.alufn = 6h0; // Set ALU to ADD
+                alu.a = head_address.q; // Set input 'a' of ALU to current head_address
+                if(direction.q == 4b1000){
+                    //alu -1
+                    alu.b = -1;
+                    head_address.d = alu.alu;
+                }
+                else if(direction.q == 4b0100){
+                    //alu +1
+                    alu.b = 1;
+                    head_address.d = alu.alu;
+                }
+                else if(direction.q == 4b0010){
+                    // alu +40  
+                    alu.b = 40;
+                    head_address.d = alu.alu;
+                }
+                else{
+                    // alu -40
+                    alu.b = -40;
+                    head_address.d = alu.alu;
+                }       
+                state.d = state.COMPARE_STATE;
+            }
+            random.next=0;
+            input_counter.d = input_counter.q + 1;
+        
+        state.COMPARE_STATE:
+      
+            input_counter.d = 0;
+            // Possible block states
+            // 2b00 = empty block
+            // 2b01 = food
+            // 2b10/11 = wall/edge
+            if(head_address.q[15:14] == 2b00){
+                state.d = state.KEEP_LENGTH;
+                //update tail and all body blocks
+            }
+            else if(head_address.q[15:14] == 2b01){
+                state.d = state.GROW;
+                //Update body blocks only
+            }
+            else{
+                state.d = state.START_SCREEN;
+            }
+        random.next=0;
+        
+        state.KEEP_LENGTH:
+            // Update head and tail position
+            
+            state.d = state.WAIT_INPUT;
+            random.next=0;
+        
+        state.GROW:
+            // Keep tail position and update head postion
+            state.d = state.WAIT_INPUT;
+            random.next=0;
+        
+        default:
+            random.next=0;
+            state.d = state.WAIT_INPUT;
+            direction_lut.dir_state = c{left_button, right_button, up_button, down_button,direction.q[3:0]};
+            alu.a = 16h0;
+            alu.b = 16h0;
+            alu.alufn = 6h0;       
+    }
+    direction_lut.dir_state = c{left_button, right_button, up_button, down_button,direction.q[3:0]};
+    alu.a = 16h0;
+    alu.b = 16h0;
+    alu.alufn = 6h0;    
+  }
+}

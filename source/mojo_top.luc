@@ -1,0 +1,153 @@
+module mojo_top (
+    input clk,              // 50MHz clock
+    input rst_n,            // reset button (active low)
+    output led [8],         // 8 user controllable LEDs
+    input cclk,             // configuration clock, AVR ready when high
+    output spi_miso,        // AVR SPI MISO
+    input spi_ss,           // AVR SPI Slave Select
+    input spi_mosi,         // AVR SPI MOSI
+    input spi_sck,          // AVR SPI Clock
+    output spi_channel [4], // AVR general purpose pins (used by default to select ADC channel)
+    input avr_tx,           // AVR TX (FPGA RX)
+    output avr_rx,          // AVR RX (FPGA TX)
+    input avr_rx_busy,      // AVR RX buffer full
+    //output io_led [3][8],   // LEDs on IO Shield
+    //output io_seg [8],      // 7-segment LEDs on IO Shield
+    //output io_sel [4],      // Digit select on IO Shield
+    //input io_button [5],    // 5 buttons on IO Shield
+    //input io_dip [3][8],     // DIP switches on IO Shield
+    output vga_r[8],          //input for the VGA R channel
+    output vga_g[8],          //input for the VGA G channel
+    output vga_b[8],          //input for the VGA B spi_channel
+    output vga_hsync,         //output for the VGA horizontal sync signal
+    output vga_vsync,        //output for the VGA vertical sync signal
+    output vga_blk,            //output fro the vga blanking signal
+    output vga_clk
+  ) {
+  
+  sig rst;                  // reset signal
+  
+  clk_divider clkgen(
+    .clk_in(clk)
+    );
+  
+  //sig wr_en;
+  //sig wr_addr[12];
+  //sig wr_data[8];
+  
+
+  
+  .clk(clkgen.clk_50) {
+    // The reset conditioner is used to synchronize the reset signal to the FPGA
+    // clock. This ensures the entire FPGA comes out of reset at the same time.
+    reset_conditioner reset_cond;
+    .rst(rst){
+      avr_interface avr;
+      reg_interface register;
+    }
+  }
+  
+
+  //serial_to_vga serial_print(
+  //  .clk(clkgen.clk_50),
+  //  .rst(rst),
+  //  .new_rx(avr.new_rx_data),
+  //  .rx_data(avr.rx_data),
+  //  .tx_busy(avr.tx_busy)
+  //  );
+  
+    vga vga (
+      .rst(rst),
+      .clk(clkgen.clk_25)
+      //.wr_en(serial_print.out_vram_write_en),
+      //.wr_addr(serial_print.out_vram_addr),
+      //.wr_data(serial_print.out_vram_data)      
+    );
+  
+
+  
+  
+  
+  always {
+    reset_cond.in = ~rst_n; // input raw inverted reset signal
+    rst = reset_cond.out;   // conditioned reset
+    
+    led = 8h00;             // turn LEDs off
+    
+    // connect inputs of avr
+    avr.cclk = cclk;
+    avr.spi_ss = spi_ss;
+    avr.spi_mosi = spi_mosi;
+    avr.spi_sck = spi_sck;
+    avr.rx = avr_tx;
+    avr.channel = hf;           // ADC is unused so disable
+    avr.tx_block = avr_rx_busy; // block TX when AVR is busy
+    
+    // connect outputs of avr
+    spi_miso = avr.spi_miso;
+    spi_channel = avr.spi_channel;
+    avr_rx = avr.tx;
+    
+    // serial port
+    //avr.tx_data = serial_print.tx_data;  // don't care
+    //avr.new_tx_data = serial_print.new_tx; // no data
+    
+
+    register.rx_data = avr.rx_data;
+    register.new_rx_data = avr.new_rx_data;
+    avr.tx_data = register.tx_data;
+    avr.new_tx_data = register.new_tx_data;
+    register.tx_busy = avr.tx_busy;
+ 
+    register.regIn.drdy = 0;    // default to no data
+    register.regIn.data = 32bx; // don't care
+    
+    
+    //io_led = 3x{{8h00}};    // turn LEDs off
+    //io_seg = 8hff;          // turn segments off
+    //io_sel = 4hf;           // select no digits
+    
+    //clk2.d = clk2.q + 1;    //increase clock divider counter val
+    
+    //vga_hsync = v_vga.o_hs;
+    //vga_vsync = v_vga.o_vs;
+    //x = v_vga.o_x;
+    //y = v_vga.o_y;
+    //// Four overlapping squares
+    //
+    //sq_a = ((x > 120) & (y >  40) & (x < 280) & (y < 200)) ? 1 : 0;
+    //sq_b = ((x > 200) & (y > 120) & (x < 360) & (y < 280)) ? 1 : 0;
+    //sq_c = ((x > 280) & (y > 200) & (x < 440) & (y < 360)) ? 1 : 0;
+    //sq_d = ((x > 360) & (y > 280) & (x < 520) & (y < 440)) ? 1 : 0;
+    //
+    //vga_r = 4x{sq_b};         // square b is red
+    //vga_g = 4x{sq_a | sq_d};  // squares a and d are green
+    //vga_b = 4x{sq_c};         // square c is blue
+    
+    if (register.regOut.new_cmd) {             // new command
+      if (register.regOut.write) {             // if write
+        vga.wr_en = 1;
+        vga.wr_addr = register.regOut.address;
+        vga.wr_data = register.regOut.data[7:0];  // write the LEDs
+      }else{
+        vga.wr_en = 0;
+        vga.wr_addr = 0;
+        vga.wr_data = 0;
+      }
+    } else {                                 // if read
+      vga.wr_en = 0;
+      vga.wr_addr = 0;
+      vga.wr_data = 0;
+    }
+    
+    
+    
+    vga_r =  vga.r;
+    vga_g =  vga.g;
+    vga_b =   vga.b;
+    vga_hsync = vga.o_hs;
+    vga_vsync = vga.o_vs; 
+    vga_blk = vga.o_blk;
+    vga_clk = vga.o_clk;
+  }
+}
