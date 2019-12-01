@@ -1,4 +1,4 @@
-# Date: Wed Nov 20 08:21:43 2019
+# Date: Sat Nov 30 15:31:17 2019
 
 SET addpads = false
 SET asysymbol = true
@@ -17,6 +17,6 @@ SET simulationfiles = Behavioral
 SET speedgrade = -2
 SET verilogsim = true
 SET vhdlsim = false
-SET workingdirectory = "..\temp\"
+SET workingdirectory = "D:\Sen\Documents\Projects\VGA Module\temp\"
 
 # CRC: a2292c51

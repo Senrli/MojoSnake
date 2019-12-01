@@ -64,9 +64,9 @@ module clk_divider_exdes
   input         CLK_IN1,
   // Reset that only drives logic in example design
   input         COUNTER_RESET,
-  output [4:1]  CLK_OUT,
+  output [3:1]  CLK_OUT,
   // High bits of counters driven by clocks
-  output [4:1]  COUNT
+  output [3:1]  COUNT
  );
 
   // Parameters for the counters
@@ -74,7 +74,7 @@ module clk_divider_exdes
   // Counter width
   localparam    C_W       = 16;
   // Number of counters
-  localparam    NUM_C     = 4;
+  localparam    NUM_C     = 3;
   genvar        count_gen;
   // Create reset for the counters
   wire          reset_int = COUNTER_RESET;
@@ -97,10 +97,9 @@ module clk_divider_exdes
    (// Clock in ports
     .clk_in            (CLK_IN1),
     // Clock out ports
-    .clk_25           (clk_int[1]),
-    .clk_50           (clk_int[2]),
-    .clk_100           (clk_int[3]),
-    .clk_200           (clk_int[4]));
+    .clk_50           (clk_int[1]),
+    .clk_25           (clk_int[2]),
+    .clk_10           (clk_int[3]));
 
 genvar clk_out_pins;
 
@@ -126,7 +125,6 @@ endgenerate
   assign clk[1] = clk_int[1];
   assign clk[2] = clk_int[2];
   assign clk[3] = clk_int[3];
-  assign clk[4] = clk_int[4];
 
 
   // Reset synchronizer

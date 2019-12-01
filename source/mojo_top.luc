@@ -22,7 +22,17 @@ module mojo_top (
     output vga_hsync,         //output for the VGA horizontal sync signal
     output vga_vsync,        //output for the VGA vertical sync signal
     output vga_blk,            //output fro the vga blanking signal
-    output vga_clk
+    output vga_clk,
+    
+    input b_up_a,
+    input b_up_b,
+    input b_down_a,
+    input b_down_b,
+    input b_left_a,
+    input b_left_b,
+    input b_right_a,
+    input b_right_b
+    
   ) {
   
   sig rst;                  // reset signal
@@ -35,12 +45,27 @@ module mojo_top (
   //sig wr_addr[12];
   //sig wr_data[8];
   
+  sig debug_en;
+  sig debug_wr_en;
+  sig debug_addr[10];
+  sig debug_write_data[16];
+  
 
   
-  .clk(clkgen.clk_50) {
+  .clk(clkgen.clk_25) {
     // The reset conditioner is used to synchronize the reset signal to the FPGA
     // clock. This ensures the entire FPGA comes out of reset at the same time.
     reset_conditioner reset_cond;
+    
+    button_conditioner b_up_a_button(.in(b_up_a));
+    button_conditioner b_up_b_button(.in(b_up_b));
+    button_conditioner b_down_a_button(.in(b_down_a));
+    button_conditioner b_down_b_button(.in(b_down_b));
+    button_conditioner b_left_a_button(.in(b_left_a));
+    button_conditioner b_left_b_button(.in(b_left_b));
+    button_conditioner b_right_a_button(.in(b_right_a));
+    button_conditioner b_right_b_button(.in(b_right_b));
+    
     .rst(rst){
       avr_interface avr;
       reg_interface register;
@@ -56,16 +81,36 @@ module mojo_top (
   //  .tx_busy(avr.tx_busy)
   //  );
   
-    vga vga (
-      .rst(rst),
-      .clk(clkgen.clk_25)
-      //.wr_en(serial_print.out_vram_write_en),
-      //.wr_addr(serial_print.out_vram_addr),
-      //.wr_data(serial_print.out_vram_data)      
-    );
+    //vga vga (
+   //   .rst(rst),
+   //   .clk(clkgen.clk_25)
+   //   //.wr_en(serial_print.out_vram_write_en),
+   //   //.wr_addr(serial_print.out_vram_addr),
+   //   //.wr_data(serial_print.out_vram_data)      
+  //  );
   
 
   
+  snake_fsm snake(
+    .rst(rst),
+    .clk(clkgen.clk_25),
+    .left_button(b_left_a_button.out),
+    .right_button(b_right_a_button.out),
+    .up_button(b_up_a_button.out),
+    .down_button(b_down_a_button.out),
+    .debug_en(debug_en),
+    .debug_wr_en(debug_wr_en),
+    .debug_addr(debug_addr),
+    .debug_write_data(debug_write_data)
+    );
+  
+  vga vga (
+      .rst(rst),
+      .clk(clkgen.clk_25),
+      .wr_en(snake.vram_wr_en),
+      .wr_addr(snake.vram_wr_addr),
+      .wr_data(snake.vram_wr_data)      
+    );
   
   
   always {
@@ -73,6 +118,10 @@ module mojo_top (
     rst = reset_cond.out;   // conditioned reset
     
     led = 8h00;             // turn LEDs off
+    spi_miso =bz;
+    spi_channel = bzzzz;
+    avr_rx = bz;
+    
     
     // connect inputs of avr
     avr.cclk = cclk;
@@ -124,23 +173,37 @@ module mojo_top (
     //vga_g = 4x{sq_a | sq_d};  // squares a and d are green
     //vga_b = 4x{sq_c};         // square c is blue
     
+   //if (register.regOut.new_cmd) {             // new command
+    //  if (register.regOut.write) {             // if write
+    //    vga.wr_en = 1;
+   //     vga.wr_addr = register.regOut.address;
+   //     vga.wr_data = register.regOut.data[7:0];  // write the LEDs
+   //   }else{
+    //    vga.wr_en = 0;
+    //    vga.wr_addr = 0;
+    //    vga.wr_data = 0;
+    //  }
+    //} else {                                 // if read
+   //   vga.wr_en = 0;
+   //   vga.wr_addr = 0;
+//vga.wr_data = 0;
+  //  }
+    
     if (register.regOut.new_cmd) {             // new command
       if (register.regOut.write) {             // if write
-        vga.wr_en = 1;
-        vga.wr_addr = register.regOut.address;
-        vga.wr_data = register.regOut.data[7:0];  // write the LEDs
-      }else{
-        vga.wr_en = 0;
-        vga.wr_addr = 0;
-        vga.wr_data = 0;
+        debug_en = 1;
+        debug_wr_en = 1;
+        debug_addr = register.regOut.address[9:0];
+        debug_write_data = register.regOut.data[15:0];  // write the LEDs
+      }else{                                    //if read
+        debug_en = 1;
+        debug_wr_en = 0;
+        register.regIn.data = snake.debug_read_data; // read the LEDs
+        register.regIn.drdy = snake.debug_read_ready; // signal data ready
       }
-    } else {                                 // if read
-      vga.wr_en = 0;
-      vga.wr_addr = 0;
-      vga.wr_data = 0;
+    } else {                                 // if no commands
+      debug_en = 0;
     }
-    
-    
     
     vga_r =  vga.r;
     vga_g =  vga.g;
@@ -149,5 +212,8 @@ module mojo_top (
     vga_vsync = vga.o_vs; 
     vga_blk = vga.o_blk;
     vga_clk = vga.o_clk;
+    
+    
+    
   }
 }

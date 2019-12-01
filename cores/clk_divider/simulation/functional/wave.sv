@@ -90,8 +90,7 @@ group clear 0 end
 
 group insert \
     {clk_divider_tb.dut.clk[1]} \
-    {clk_divider_tb.dut.clk[2]}  \     {clk_divider_tb.dut.clk[3]}  \     {clk_divider_tb.dut.clk[4]}  
-
+    {clk_divider_tb.dut.clk[2]}  \     {clk_divider_tb.dut.clk[3]} 
 group using {Counters}
 group set -overlay 0
 group set -comment {}
@@ -99,8 +98,7 @@ group clear 0 end
 
 group insert \
     {clk_divider_tb.dut.counter[1]} \
-    {clk_divider_tb.dut.counter[2]}  \     {clk_divider_tb.dut.counter[3]}  \     {clk_divider_tb.dut.counter[4]}  
-
+    {clk_divider_tb.dut.counter[2]}  \     {clk_divider_tb.dut.counter[3]} 
 
 set id [waveform add -signals [list {nc::clk_divider_tb.COUNT} ]]
 

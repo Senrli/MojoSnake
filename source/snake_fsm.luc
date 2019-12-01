@@ -4,110 +4,646 @@ module snake_fsm (
     input left_button,
     input right_button,
     input up_button,
-    input down_button    
+    input down_button,
+
+    output vram_wr_en,          //output to vga vram module for write enable
+    output vram_wr_addr[12],    //output to vga vram module for write address
+    output vram_wr_data[8],      //output to vga vram module for write data
+    
+    input debug_en,
+    input debug_wr_en,
+    input debug_addr[10],
+    output debug_read_data[16],
+    input debug_write_data[16],
+    output debug_read_ready
   ) {
   
   .clk(clk){
     .rst(rst){
       
-      dff input_counter[25]; // Duration to wait for user input
-      dff user_input[16]; // Register to store user inputs
-      dff head_address[16]; // Register to store the address of the head
-      dff tail_address[16]; // Register to store the address of the tail
-      dff block_state[16]; // Register to store state of the next block
-      dff direction[16]; // Register to store current direction
-      fsm state = {START_SCREEN, WAIT_INPUT, COMPARE_STATE, KEEP_LENGTH, GROW, GAMEOVER};
+        dff input_counter[25]; // Duration to wait for user input
+        dff user_input[4]; // Register to store user inputs
+        dff head_address[16]; // Register to store the address of the head
+        dff previous_head[16]; // Register to store previous head head_address
+        dff tail_address[16]; // Register to store the address of the tail
+        dff previous_tail[16]; // Register to store previous tail address
+        dff block_state[16]; // Register to store state of the next block
+        dff direction[16]; // Register to store current direction
+          dff snake_length[16]; // Register to store length of the snake
+        fsm state = {START_SCREEN,  DRAW_START, CALC, MUL1_1, MUL1_2, DIV1, ADD1, DRAW1, ADD2, DRAW2, WAIT_INPUT, COMPARE_STATE, KEEP_LENGTH, GROW, GAMEOVER};
       
+        dff ram_clear;              //signal to tell the ram to do a self clear         //inverted
+        dff ram_clear_counter[10]; //counter to keep track of the counter, until it reaches 952
+
+        dff ram_read;               //register to record the stage of ram reading process
+        dff ram_write;              //signal to tell to write to ram                    //inverted
+        dff ram_write_counter[3]; // Register to do different read and writes
+      
+        dff vram_refresh;         //enable refresh on vram for the default screen       //inverted
+        dff vram_temp_reg_0[16];    //    store the buffer value that need to be changed to the screen
+        dff vram_temp_reg_1[16];    //    store the buffer value that need to be changed to the screen
+        dff vram_temp_reg_2[16];    //    store the buffer value that need to be changed to the screen
+        dff vram_temp_reg_3[16];    //    store the buffer value that need to be changed to the screen
+
+      
+        dff vram_refresh_ctr[12]; //counter for the vram refresh for the default screen
+
+        dff score[10];          //score for the game
+        
+        dff calc_counter[5];    //to record down how many clock cycles has been through for the calculation stage
+      
+        dff debug_read_ctr;      //for debugging purposes
+      
+      dff r1[16];
+      dff r2[16];
+      dff r3[16];
+      dff r4[16];
     }
   }
   
+  sig ram_wr_en;
+  sig ram_addr[10];
+  sig ram_wr_data[16];
+
+
+  sig dividend[10];
+  sig divisor[6];
+  
+  sig mul_a[10];
+  sig mul_b[6];
+ 
+  sig reg_val[16];  
+
+  const START_POS = 10d460;             //starting position for the snake's head
+  //const START_POS = 10d950;
+  const TOTAL_BLOCKS = d952;              //total number of blocks for the snake
+
+  const SNAKE_SHAPE = d219;
+  const FRUIT_SHAPE = d177;
+  const WALL_SHAPE = d178;
+  const EMPTY_SHAPE = d0;
+  const SMILEY_SHAPE = d1;
+
+
+  const SCORE = $reverse("     SCORE");
+  const COURSE = $reverse(" 50.002 CS");
+  const SNAKE = $reverse("     SNAKE");
+  const BY = $reverse(" BY       ");
+  const JOSEPH = $reverse("    JOSEPH");
+  const SENRUI = $reverse("    SENRUI");
+  const SHAWN = $reverse("     SHAWN");
+  const XULIANG = $reverse("   XULIANG");
+  const ZEFAN = $reverse("     ZEFAN");
+
+  const OVER = $reverse("GAME OVER");
+  
+  const SCOREVAL = $reverse("0000000000");
+  
+  
   simple_ram disp_game_mem(
     #SIZE(16), 
-    #DEPTH(952), 
+    #DEPTH(TOTAL_BLOCKS),                //34*28
     .clk(clk),
     .write_en(ram_wr_en),
     .write_data(ram_wr_data),
-    .write_addr(ram_wr_addr),
-    .read_addr(ram_rd_addr),
-  );  
+    .address(ram_addr)
+  ); 
   
-  sig ram_wr_en;
-  sig ram_wr_addr;
-  sig ram_wr_data;
-  sig ram_rd_addr;
-
+ // pn_gen random(
+ //   .clk(clk),
+  //  .rst(rst),
+ //   .seed(32h0)      //not used
+ // );
   
-  const START_POS = 10d475;
+  //decoder decoder(
+  //  #WIDTH(4),
+ //   .in(random.num[31:28])
+  //);
   
-  pn_gen random(
+  
+  div_gen_v3_0 divider(
     .clk(clk),
-    .rst(rst),
-    .seed(32h0)      //not used
-  );
+      .dividend(dividend),
+  //output [9 : 0] quotient;
+  .divisor(divisor)
+  //output [5 : 0] fractional;
+    );
   
-  decoder decoder(
-    #WIDTH(4),
-    .in(random.num[31:28])
-  );
+  multiplier multiplier(
+  .clk(clk),
+    .a(mul_a),
+    .b(mul_b)
+    );
+  
   
   direction_lut direction_lut; 
   alu_simple alu;
   
   always {
-    case(state.q){
+
+
+    if (debug_en){
+        dividend = 10bz;
+    divisor = 6bz;
+      mul_a = 10bz;
+      mul_b = 6bz;
+      direction_lut.dir_state = b0;
+      alu.a = b0;
+      alu.b = b0;
+      alu.alufn = bz;
+      
+      if(debug_wr_en){
+        ram_wr_en = 1;
+        ram_addr = debug_addr;
+        ram_wr_data = debug_write_data;
+      }
+      else{
+        ram_wr_en = 0;
+        case(debug_read_ctr.q){
+          0:
+            ram_addr = debug_addr;
+            debug_read_ctr.d = 1;
+            debug_read_ready = 0;
+            debug_read_data = 0;
+          1:
+            ram_addr = debug_addr;
+            debug_read_data = disp_game_mem.read_data;
+            debug_read_ready = 1;
+          default:
+            debug_read_ready = 0;
+            debug_read_data = 10b0; 
+          }  
+      }
+    }
+    else{
+      debug_read_ready = 0;
+      debug_read_data = 10b0;    
+      debug_read_ctr.d = 0;
+      
+      case(state.q){
+        
         state.START_SCREEN:
-            random.next = 1;
-            head_address.d = START_POS;
-            if(left_button | right_button | up_button | down_button){
-                 state.d = state.WAIT_INPUT; 
-                 direction.d = decoder.out;
+          snake_length.d = d4; // Initial snake length is 4
+          //random.next = d1;
+          head_address.d = START_POS;
+
+          if(left_button || right_button || up_button || down_button){      //go to next state
+            vram_wr_en = 0;
+            ram_wr_en = 0;
+            direction.d = 16b0100;
+            ram_write.d = 0;
+            ram_write_counter.d = 0;
+            vram_refresh.d = 0;
+            vram_refresh_ctr.d = 0;
+            state.d = state.DRAW_START;
+          }
+            
+          if (~ram_clear.q){
+            ram_wr_en = 1;
+            ram_wr_data = 0;
+            ram_addr = ram_clear_counter.q;
+            if (ram_clear_counter.q == 951){
+                ram_clear_counter.d = 0;    //reset the counter
+                ram_clear.d = 1;            //reset the ram_clear flag
+                ram_write.d = 1;            //set the ram_write flag
             }
-           
-        state.WAIT_INPUT:
-            if(input_counter.q == 25000000){
-                //user_input.d = c{12h0, left_button, right_button, up_button, down_button};
-                direction_lut.dir_state = c{left_button, right_button, up_button, down_button,direction.q[3:0]};
-                if(direction_lut.travel_dir != 4b0000){ // Only update new direction if the user press something
-                    // Compare old and new direction
-                    direction.d = c{12h0, direction_lut.travel_dir};
+            else{
+              ram_clear_counter.d = ram_clear_counter.q + 1;      //increment
+            }           
+          }
+          else{
+            ram_wr_en = 0;                      //dont assert
+            ram_wr_data = 0;                    //dont assert
+            ram_addr = 0;                       //dont assert
+          }
+
+          if (ram_write.q){                        //this is to be written AFTER the ram has been initialised (wiped)
+            case(ram_write_counter.q){
+              3d0:
+                ram_wr_en = 1;
+                ram_addr = START_POS;
+                ram_wr_data = c{2b11, 4b0001, 10b0};                  //store the block in front of it (nothing)
+                vram_temp_reg_0.d = c{2b11, 4b0001, ram_addr};
+                head_address.d = c{2b11, 4b0001, ram_addr};
+                previous_head.d = c{2b11, 4b0001, ram_addr};
+                ram_write_counter.d = ram_write_counter.q + 1;
+            3d1:
+                ram_wr_en = 1;
+                reg_val = START_POS - d1;
+                ram_addr = reg_val[9:0];
+                ram_wr_data = c{2b11, 4b0001, START_POS};             //store the block in front of it
+                vram_temp_reg_1.d = c{2b11, 4b0001, ram_addr};
+                ram_write_counter.d = ram_write_counter.q + 1;
+            3d2:
+                ram_wr_en = 1;
+                reg_val = START_POS - d2;
+                ram_addr = reg_val[9:0];
+                ram_wr_data = c{2b11, 4b0001, ram_addr+1};            //store the block in front of it
+                vram_temp_reg_2.d = c{2b11, 4b0001, ram_addr};
+                ram_write_counter.d = ram_write_counter.q + 1;
+            3d3:
+                ram_wr_en = 1;
+                reg_val = START_POS - d3;
+                ram_addr = reg_val[9:0];
+                ram_wr_data = c{2b11, 4b0001, ram_addr+1};            //store the block in front of it
+                vram_temp_reg_3.d = c{2b11, 4b0001, ram_addr};
+                tail_address.d = c{2b11, 4b0001, ram_addr};           //edited
+                previous_tail.d = c{2b11, 4b0001, ram_addr};          //edited
+                ram_write.d = 0;                    // deassert ram_write
+                ram_write_counter.d = 0;
+           default:
+                ram_wr_en = 0;
+                ram_addr = 0;
+                ram_wr_data = 0;
+                ram_write.d = 0;
+                ram_write_counter.d = 0;
+            }
+          }
+
+            if (~vram_refresh.q){
+                vram_wr_en = 1;
+                if(vram_refresh_ctr.q < 2400){
+                    vram_wr_addr = vram_refresh_ctr.q;
+                    if (vram_refresh_ctr.q == 0){  //Top-left corner
+                        vram_wr_data = 201;
+                    }
+                    else if (vram_refresh_ctr.q == 2320){ //Bottom-left corner
+                        vram_wr_data = 200;
+                    }
+                    else if (vram_refresh_ctr.q == 69){ //Top-right corner
+                        vram_wr_data = 187;
+                    }
+                    else if ( vram_refresh_ctr.q == 2389){ //Bottom-right corner
+                      vram_wr_data = 188;
+                    }
+                    else if ( (vram_refresh_ctr.q - 80*(vram_refresh_ctr.q / 80)) == 0){ // datamod80, left vertical border
+                      vram_wr_data = 186;
+                    }
+                    else if ( (vram_refresh_ctr.q - 80*(vram_refresh_ctr.q / 80)) == 69){ // datamod80, right vertical border
+                      vram_wr_data = 186;
+                    }
+                    else if(vram_refresh_ctr.q > 0 && vram_refresh_ctr.q < 69){ // top border
+                      vram_wr_data = 205;
+                    }
+                    else if(vram_refresh_ctr.q > 2320 && vram_refresh_ctr.q < 2389){ // bottom border
+                      vram_wr_data = 205;
+                    }
+                    else if(vram_refresh_ctr.q >=790 && vram_refresh_ctr.q <= 799){ // row 10
+                      vram_wr_data = SCORE[vram_refresh_ctr.q -790];
+                    }
+                    else if(vram_refresh_ctr.q >=870 && vram_refresh_ctr.q <= 879){ // row 11
+                      vram_wr_data = SCOREVAL[vram_refresh_ctr.q -870];
+                    }                    
+                    else if(vram_refresh_ctr.q >=1510 && vram_refresh_ctr.q <= 1519){ // row 19
+                      vram_wr_data = COURSE[vram_refresh_ctr.q -1510];
+                    }
+                    else if(vram_refresh_ctr.q >=1670 && vram_refresh_ctr.q <= 1679){ // row 21
+                      vram_wr_data = SNAKE[vram_refresh_ctr.q -1670];
+                    }
+                    else if(vram_refresh_ctr.q >=1830 && vram_refresh_ctr.q <= 1839){ // row 23
+                      vram_wr_data = BY[vram_refresh_ctr.q -1830];
+                    }
+                    else if(vram_refresh_ctr.q >=1910 && vram_refresh_ctr.q <= 1919){ // row 24
+                      vram_wr_data = JOSEPH[vram_refresh_ctr.q -1910];
+                    }
+                    else if(vram_refresh_ctr.q >=1990 && vram_refresh_ctr.q <= 1999){ // row 25
+                      vram_wr_data = SENRUI[vram_refresh_ctr.q -1990];
+                    }
+                    else if(vram_refresh_ctr.q >=2070 && vram_refresh_ctr.q <= 2079){ // row 24
+                      vram_wr_data = SHAWN[vram_refresh_ctr.q -2070];
+                    }
+                    else if(vram_refresh_ctr.q >=2150 && vram_refresh_ctr.q <= 2159){ // row 24
+                      vram_wr_data = XULIANG[vram_refresh_ctr.q -2150];
+                    }
+                    else if(vram_refresh_ctr.q >=2230 && vram_refresh_ctr.q <= 2239){ // row 24
+                      vram_wr_data = ZEFAN[vram_refresh_ctr.q -2230];
+                    }
+                    else{
+                        vram_wr_data = 0;
+                    }
+            
+                    if (vram_refresh_ctr.q == 2399){
+                      vram_refresh.d = 1;
+                      vram_refresh_ctr.d = 0;
+                    }
+                    else{
+                      vram_refresh_ctr.d = vram_refresh_ctr.q + 1;
+                    }
                 }
+            }else{
+                vram_wr_en = 0;
+            }
           
-                // Compute location of next head block
-                alu.alufn = 6h0; // Set ALU to ADD
-                alu.a = head_address.q; // Set input 'a' of ALU to current head_address
-                if(direction.q == 4b1000){
-                    //alu -1
-                    alu.b = -1;
-                    head_address.d = alu.alu;
-                }
-                else if(direction.q == 4b0100){
-                    //alu +1
-                    alu.b = 1;
-                    head_address.d = alu.alu;
-                }
-                else if(direction.q == 4b0010){
-                    // alu +40  
-                    alu.b = 40;
-                    head_address.d = alu.alu;
-                }
-                else{
-                    // alu -40
-                    alu.b = -40;
-                    head_address.d = alu.alu;
-                }       
-                state.d = state.COMPARE_STATE;
+        state.DRAW_START:
+          vram_wr_en = 0;
+          ram_wr_en = 0;
+          if(ram_write_counter.q >= 4){           //if we scanned through all values
+            state.d = state.WAIT_INPUT;
+            vram_refresh_ctr.d = 0;                  //reset the vram counter used
+            ram_write_counter.d = 0;                //reset the game ram counter
+            ram_write.d = 1;                        //clear the counter and then disable writting
+          }
+          else{
+            case(ram_write_counter.q){
+            0:
+              reg_val = vram_temp_reg_0.q;
+            1:
+              reg_val = vram_temp_reg_1.q;   
+            2:
+              reg_val = vram_temp_reg_2.q;
+            3:
+              reg_val = vram_temp_reg_3.q;
+            default:
+              reg_val = 0;
             }
-            random.next=0;
-            input_counter.d = input_counter.q + 1;
+            ram_addr = reg_val[9:0];
+            if(reg_val[10]){                          //if there is a new address to be changed
+              state.d = state.CALC;                   //jump to the CALC state
+              calc_counter.d = 0;                     //clear the counter for the calculations
+            }
+            else{                                //if there is no any register to be updated
+              ram_write_counter.d = ram_write_counter.q + 1;  //just skip that register
+            }
+
+          }
+
+        state.CALC:
+          case(ram_write_counter.q){
+            0:
+              reg_val = vram_temp_reg_0.q;
+            1:
+              reg_val = vram_temp_reg_1.q;   
+            2:
+              reg_val = vram_temp_reg_2.q;
+            3:
+              reg_val = vram_temp_reg_3.q;
+            default:
+              reg_val = 0;
+          }
+          vram_wr_en = 0;
+          ram_wr_en = 0;
+          ram_addr = reg_val[9:0];
+          case(calc_counter.q){
+            0:                        //giving out values to the divider
+              divisor = 34;           //giving out values to the multiplier
+              dividend = ram_addr;
+              mul_a = ram_addr;
+              mul_b = 2;
+              calc_counter.d = 1;
+              
+            1:
+              divisor = 34;
+              dividend = ram_addr;
+              mul_a = ram_addr;
+              mul_b = 2;
+              calc_counter.d = 2;
+
+            2:
+              divisor = 34;
+              dividend = ram_addr;
+              mul_a = ram_addr;
+              mul_b = 2;
+              calc_counter.d = 3;
+
+            3:                          //taking product of the multiplication i*2
+              divisor = 34;
+              dividend = ram_addr;
+              mul_a = ram_addr;
+              mul_b = 2;
+              r1.d = multiplier.p;
+              calc_counter.d = 4;
+
+            4:
+              divisor = 34;
+              dividend = ram_addr;
+              calc_counter.d = 5;
+
+            5:
+              divisor = 34;
+              dividend = ram_addr;
+              calc_counter.d = 6;
+
+            6:
+              divisor = 34;
+              dividend = ram_addr;
+              calc_counter.d = 7;
+
+            7:
+              divisor = 34;
+              dividend = ram_addr;
+              calc_counter.d = 8;
+
+            8:
+              divisor = 34;
+              dividend = ram_addr;
+              calc_counter.d = 9;
+
+            9:
+              divisor = 34;
+              dividend = ram_addr;
+              calc_counter.d = 10;
+            
+            10:
+              divisor = 34;
+              dividend = ram_addr;
+              calc_counter.d = 11;
+
+            11:
+              divisor = 34;
+              dividend = ram_addr;
+              calc_counter.d = 12;
+
+            12:
+              divisor = 34;
+              dividend = ram_addr;
+              calc_counter.d = 13;
+ 
+              
+            13:                             //taking quotient of the division to r2
+              divisor = 34;
+              dividend = ram_addr;
+              r2.d = divider.quotient;
+              calc_counter.d = 14;
+
+            14:                             //giving input for the multiplication i/34*12
+              mul_a = r2.q;
+              mul_b = 12;
+              calc_counter.d = 15;
+
+            15:
+              mul_a = r2.q;
+              mul_b = 12;
+              calc_counter.d = 16;  
+
+            16:
+              mul_a = r2.q;
+              mul_b = 12;
+              calc_counter.d = 17;  
+
+            17:                             //taking output of the multiplication i/34*12
+              mul_a = r2.q;
+              mul_b = 12;
+              r2.d = multiplier.p;
+              calc_counter.d = 0;
+              state.d = state.ADD1; 
+          }
+
+        state.ADD1:
+          vram_wr_en = 0;
+          ram_wr_en = 0;
+          case(ram_write_counter.q){
+            0:
+              reg_val = vram_temp_reg_0.q;
+            1:
+              reg_val = vram_temp_reg_1.q;   
+            2:
+              reg_val = vram_temp_reg_2.q;
+            3:
+              reg_val = vram_temp_reg_3.q;
+            default:
+              reg_val = 0;
+            }
+          ram_addr = reg_val[9:0];
+          r3.d = r1.q + r2.q + 81;
+          state.d = state.DRAW1;
+
+        state.DRAW1:
+          ram_wr_en = 0;
+          vram_wr_en = 1;
+          vram_wr_addr = r3.q;
+          case(ram_write_counter.q){
+            0:
+              reg_val = vram_temp_reg_0.q;
+            1:
+              reg_val = vram_temp_reg_1.q;   
+            2:
+              reg_val = vram_temp_reg_2.q;
+            3:
+              reg_val = vram_temp_reg_3.q;
+            default:
+              reg_val = 0;
+          }
+          if(reg_val[15:15] == 0 && reg_val[14:14] == 0){
+            vram_wr_data = EMPTY_SHAPE;
+          }else if(reg_val[15:15] == 0 && reg_val[14:14] == 1){
+            vram_wr_data = FRUIT_SHAPE;
+          }else if(reg_val[15:15] == 1 && reg_val[14:14] == 0){
+            vram_wr_data = WALL_SHAPE;
+          }else if(reg_val[15:15] == 1 && reg_val[14:14] == 1){
+            vram_wr_data = SNAKE_SHAPE;
+          }else{
+            vram_wr_data = SMILEY_SHAPE; 
+          }
+          state.d = state.ADD2;
+
+        state.ADD2:
+          ram_wr_en = 0;
+          vram_wr_en = 0;
+          r3.d = r3.q + 1;
+          state.d = state.DRAW2;
+
+        state.DRAW2:
+          ram_wr_en = 0;
+          vram_wr_en = 1;
+          vram_wr_addr = r3.q;
+          case(ram_write_counter.q){
+            0:
+              reg_val = vram_temp_reg_0.q;
+              vram_temp_reg_0.d = 0;
+            1:
+              reg_val = vram_temp_reg_1.q;
+              vram_temp_reg_1.d = 0;   
+            2:
+              reg_val = vram_temp_reg_2.q;
+              vram_temp_reg_2.d = 0;
+            3:
+              reg_val = vram_temp_reg_3.q;
+              vram_temp_reg_3.d = 0;
+          }
+          
+          if(reg_val[15:15] == 0 && reg_val[14:14] == 0){
+            vram_wr_data = EMPTY_SHAPE;
+          }else if(reg_val[15:15] == 0 && reg_val[14:14] == 1){
+            vram_wr_data = FRUIT_SHAPE;
+          }else if(reg_val[15:15] == 1 && reg_val[14:14] == 0){
+            vram_wr_data = WALL_SHAPE;
+          }else if(reg_val[15:15] == 1 && reg_val[14:14] == 1){
+            vram_wr_data = SNAKE_SHAPE;
+          }else{
+            vram_wr_data = SMILEY_SHAPE; 
+          }
+          ram_write_counter.d = ram_write_counter.q + 1; 
+          state.d = state.DRAW_START;
+            
+        state.WAIT_INPUT:
+          ram_wr_en = 0;
+          vram_wr_en = 0;
+            // Only update user_input register if a button has been pressed
+            // Otherwise keep the previous direction
+            if(c{left_button, right_button, up_button, down_button} != 0){
+                user_input.d = c{left_button, right_button, up_button, down_button};
+            }
+
+            if(input_counter.q == 12500000){
+                //user_input.d = c{12h0, left_button, right_button, up_button, down_button};
+                //direction_lut.dir_state = c{left_button, right_button, up_button, down_button,direction.q[3:0]};
+                //if(direction_lut.travel_dir != 4b0000){ // Only update new direction if the user press something
+                //    // Compare old and new direction
+                //    direction.d = c{12h0, direction_lut.travel_dir};
+                //}
+
+                direction_lut.dir_state = c{direction.q, user_input.q};
+                
+
+                // Compute location of next head block
+
+              if(direction.q == 4b1000 || direction.q == 4b0001){
+                    //alu -1 / -34
+                    alu.alufn = 6h000001; // Set ALU to MIN
+                    alu.a = head_address.q; // Set input 'a' of ALU to current head_address
+                    if(direction.q == 4b1000){
+                        alu.b = 1;
+                    }else if (direction.q == 4b0001){
+                        alu.b = 34;
+                    }
+              }else if (direction.q == 4b0100 || direction.q == 4b0010){
+                    //alu 1 / 34
+                    alu.alufn = 6h000000; // Set ALU to MIN
+                    alu.a = head_address.q; // Set input 'a' of ALU to current head_address
+                    if(direction.q == 4b0100){
+                        alu.b = 1;
+                    }else if (direction.q == 4b0010){
+                        alu.b = 34; 
+                    }
+              }
+              case(ram_read.q){
+                            0:
+                              ram_addr = alu.alu;
+                              ram_read.d = 1;
+                            1:
+                              ram_addr = alu.alu;
+                              head_address.d = c{disp_game_mem.read_data[15:10],alu.alu[9:0]};    //update the actual address of the block
+                              direction.d = c{12h0, direction_lut.travel_dir};
+                              state.d = state.COMPARE_STATE;
+                              input_counter.d = 0;
+                        }
+            
+            }else{
+                input_counter.d = input_counter.q + 1;
+            }
+            //random.next=0;                              //random number generator set
+            
         
         state.COMPARE_STATE:
-      
-            input_counter.d = 0;
+          ram_wr_en = 0;
+          vram_wr_en = 0;
             // Possible block states
             // 2b00 = empty block
             // 2b01 = food
-            // 2b10/11 = wall/edge
+            // 2b10/11 = wall/edge(snake)
             if(head_address.q[15:14] == 2b00){
+                head_address.d = c{b110001,head_address.q[9:0]}; 
+                previous_head.d = head_address.q;
                 state.d = state.KEEP_LENGTH;
                 //update tail and all body blocks
             }
@@ -116,24 +652,91 @@ module snake_fsm (
                 //Update body blocks only
             }
             else{
-                state.d = state.START_SCREEN;
+                state.d = state.GAMEOVER;
+                vram_refresh.d = 0;             //enable refresh
+                vram_refresh_ctr.d = 1150;
             }
-        random.next=0;
+            //random.next=0;
         
         state.KEEP_LENGTH:
-            // Update head and tail position
-            
-            state.d = state.WAIT_INPUT;
-            random.next=0;
+          
+          vram_wr_en = 0;      
+          // Update head and tail position
+          // Update game state of head block in ram to snake
+          case(ram_read.q){
+            0:
+              ram_wr_en = 0;
+              ram_addr = tail_address.q[9:0];
+              ram_read.d = 1;
+            1:
+              ram_wr_en = 1;
+              ram_addr = tail_address.q[9:0];
+              tail_address.d = disp_game_mem.read_data;
+              ram_write = 0;
+              ram_read.d = 2;
+            2:
+              ram_wr_en = 1;
+              ram_addr = 0;
+          }
+
+          vram_temp_reg_0.d = head_address.q;
+          ram_write_counter.d = 0;
+          state.d = state.DRAW_START;
+            //random.next=0;
         
         state.GROW:
+          ram_wr_en = 0;
+          vram_wr_en = 0;        
             // Keep tail position and update head postion
+            if(ram_write_counter.q == 3b000){
+                snake_length.d = snake_length.q + 1;
+                ram_wr_en = 1;
+                ram_addr = head_address.q[9:0];
+                ram_wr_data = c{2b11, 4b0001, 10h0};
+                ram_write_counter.d = ram_write_counter.q + 1;
+            }
+    
+            if(ram_write_counter.q == 3b001){
+                ram_addr = previous_head.q[9:0];
+                ram_wr_data = c{2b11, head_address.q[9:0]};
+                ram_write_counter.d = ram_write_counter.q + 1;
+            }
+            
+            if(ram_write_counter.q == 3b010){
+                previous_head.d = head_address.q;
+                ram_write_counter.d = 0;
+            }
+            
             state.d = state.WAIT_INPUT;
-            random.next=0;
+            //random.next=0;
         
+        state.GAMEOVER:
+              
+            if(~vram_refresh.q){
+                vram_wr_en = 1;
+                vram_wr_addr = vram_refresh_ctr.q;
+                vram_wr_data = OVER[vram_refresh_ctr.q-1150];
+                if(vram_refresh_ctr.q == 1157){
+                    vram_refresh.d = 1;
+                    vram_refresh_ctr.d = 0;
+                }
+            }else{
+                vram_wr_en = 0;
+                vram_wr_addr = 0;
+                vram_wr_data = 0;
+            }
+
+            if (left_button||right_button||up_button||down_button){
+                state.d = state.START_SCREEN;
+                vram_refresh.d = 1;
+                vram_refresh_ctr.d = 0;
+            }
+            //random.next=0;                              //random number generator set
+
+
         default:
-            random.next=0;
-            state.d = state.WAIT_INPUT;
+            //random.next=0;
+            state.d = state.START_SCREEN;
             direction_lut.dir_state = c{left_button, right_button, up_button, down_button,direction.q[3:0]};
             alu.a = 16h0;
             alu.b = 16h0;
@@ -144,4 +747,7 @@ module snake_fsm (
     alu.b = 16h0;
     alu.alufn = 6h0;    
   }
+          
+      }
+    
 }
