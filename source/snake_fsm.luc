@@ -45,6 +45,7 @@ module snake_fsm (
         dff vram_temp_reg_2[16];    //    store the buffer value that need to be changed to the screen
         dff vram_temp_reg_3[16];    //    store the buffer value that need to be changed to the screen
 
+        dff keep_length_counter[3];   //counter to loop through in the keep_length state
       
         dff vram_refresh_ctr[12]; //counter for the vram refresh for the default screen
 
@@ -597,22 +598,22 @@ module snake_fsm (
 
                 // Compute location of next head block
 
-              if(direction.q == 4b1000 || direction.q == 4b0001){
+              if(direction_lut.travel_dir == 4b1000 || direction_lut.travel_dir == 4b0001){
                     //alu -1 / -34
                     alu.alufn = 6h000001; // Set ALU to MIN
                     alu.a = head_address.q; // Set input 'a' of ALU to current head_address
-                    if(direction.q == 4b1000){
+                    if(direction_lut.travel_dir == 4b1000){
                         alu.b = 1;
-                    }else if (direction.q == 4b0001){
+                    }else if (direction_lut.travel_dir == 4b0001){
                         alu.b = 34;
                     }
-              }else if (direction.q == 4b0100 || direction.q == 4b0010){
+              }else if (direction_lut.travel_dir == 4b0100 || direction_lut.travel_dir == 4b0010){
                     //alu 1 / 34
                     alu.alufn = 6h000000; // Set ALU to MIN
                     alu.a = head_address.q; // Set input 'a' of ALU to current head_address
-                    if(direction.q == 4b0100){
+                    if(direction_lut.travel_dir == 4b0100){
                         alu.b = 1;
-                    }else if (direction.q == 4b0010){
+                    }else if (direction_lut.travel_dir == 4b0010){
                         alu.b = 34; 
                     }
               }
@@ -644,6 +645,7 @@ module snake_fsm (
             if(head_address.q[15:14] == 2b00){
                 head_address.d = c{b110001,head_address.q[9:0]}; 
                 previous_head.d = head_address.q;
+                keep_length_counter.d = 0;
                 state.d = state.KEEP_LENGTH;
                 //update tail and all body blocks
             }
@@ -663,25 +665,39 @@ module snake_fsm (
           vram_wr_en = 0;      
           // Update head and tail position
           // Update game state of head block in ram to snake
-          case(ram_read.q){
+          case(keep_length_counter.q){
             0:
               ram_wr_en = 0;
               ram_addr = tail_address.q[9:0];
-              ram_read.d = 1;
+              keep_length_counter.d = 1;
             1:
               ram_wr_en = 1;
               ram_addr = tail_address.q[9:0];
               tail_address.d = disp_game_mem.read_data;
-              ram_write = 0;
-              ram_read.d = 2;
+              ram_wr_data = 0;
+              keep_length_counter.d = 2;
             2:
+              ram_wr_en = 0;
+              ram_addr = previous_head.q[9:0];
+              keep_length_counter.d = 3;
+
+            3:
               ram_wr_en = 1;
-              ram_addr = 0;
+              ram_addr = previous_head.q[9:0];
+              ram_wr_data = c{b110000, head_address.q[9:0]};
+              keep_length_counter.d = 4;
+            
+            4:
+              ram_wr_en = 1;
+              ram_addr = head_address.q[9:0];
+              ram_wr_data = 16b11000000000000;
+              keep_length_counter.d = 0;
+              vram_temp_reg_0.d = head_address.q;
+              ram_write_counter.d = 0;
+              state.d = state.DRAW_START;
           }
 
-          vram_temp_reg_0.d = head_address.q;
-          ram_write_counter.d = 0;
-          state.d = state.DRAW_START;
+          
             //random.next=0;
         
         state.GROW:
