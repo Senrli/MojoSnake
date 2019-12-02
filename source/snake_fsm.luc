@@ -22,40 +22,41 @@ module snake_fsm (
   .clk(clk){
     .rst(rst){
       
-        dff input_counter[25]; // Duration to wait for user input
-        dff user_input[4]; // Register to store user inputs
-        dff head_address[16]; // Register to store the address of the head
-        dff previous_head[16]; // Register to store previous head head_address
-        dff tail_address[16]; // Register to store the address of the tail
-        dff previous_tail[16]; // Register to store previous tail address
-        dff block_state[16]; // Register to store state of the next block
-        dff direction[16]; // Register to store current direction
-          dff snake_length[16]; // Register to store length of the snake
-        fsm state = {START_SCREEN,  DRAW_START, CALC, MUL1_1, MUL1_2, DIV1, ADD1, DRAW1, ADD2, DRAW2, WAIT_INPUT, COMPARE_STATE, KEEP_LENGTH, GROW, GAMEOVER};
-      
-        dff ram_clear;              //signal to tell the ram to do a self clear         //inverted
-        dff ram_clear_counter[10]; //counter to keep track of the counter, until it reaches 952
+      dff input_counter[25]; // Duration to wait for user input
+      dff user_input[4]; // Register to store user inputs
+      dff head_address[16]; // Register to store the address of the head
+      dff previous_head[16]; // Register to store previous head head_address
+      dff tail_address[16]; // Register to store the address of the tail
+      dff previous_tail[16]; // Register to store previous tail address
+      dff block_state[16]; // Register to store state of the next block
+      dff direction[16]; // Register to store current direction
+      dff snake_length[16]; // Register to store length of the snake
+      fsm state = {START_SCREEN, GEN_FRUIT, DRAW_START, CALC, MUL1_1, MUL1_2, DIV1, ADD1, DRAW1, ADD2, DRAW2, DRAW_SCORE, WAIT_INPUT, COMPARE_STATE, KEEP_LENGTH, GROW, GAMEOVER};
+    
+      dff ram_clear;              //signal to tell the ram to do a self clear         //inverted
+      dff ram_clear_counter[10]; //counter to keep track of the counter, until it reaches 952
+      dff ram_read;               //register to record the stage of ram reading process
+      dff ram_write;              //signal to tell to write to ram                    //inverted
+      dff ram_write_counter[8]; // Register to do different read and writes
+    
+      dff vram_refresh;         //enable refresh on vram for the default screen       //inverted
+      dff vram_temp_reg_0[16];    //    store the buffer value that need to be changed to the screen
+      dff vram_temp_reg_1[16];    //    store the buffer value that need to be changed to the screen
+      dff vram_temp_reg_2[16];    //    store the buffer value that need to be changed to the screen
+      dff vram_temp_reg_3[16];    //    store the buffer value that need to be changed to the screen
+      dff vram_temp_reg_8[16];
 
-        dff ram_read;               //register to record the stage of ram reading process
-        dff ram_write;              //signal to tell to write to ram                    //inverted
-        dff ram_write_counter[3]; // Register to do different read and writes
-      
-        dff vram_refresh;         //enable refresh on vram for the default screen       //inverted
-        dff vram_temp_reg_0[16];    //    store the buffer value that need to be changed to the screen
-        dff vram_temp_reg_1[16];    //    store the buffer value that need to be changed to the screen
-        dff vram_temp_reg_2[16];    //    store the buffer value that need to be changed to the screen
-        dff vram_temp_reg_3[16];    //    store the buffer value that need to be changed to the screen
+      dff vram_temp_reg[16][16];  // test function to just use the 2D dff
 
-        dff keep_length_counter[3];   //counter to loop through in the keep_length state
-      
-        dff vram_refresh_ctr[12]; //counter for the vram refresh for the default screen
-
-        dff score[10];          //score for the game
-        
-        dff calc_counter[5];    //to record down how many clock cycles has been through for the calculation stage
-      
-        dff debug_read_ctr;      //for debugging purposes
-      
+      dff keep_length_counter[3];   //counter to loop through in the keep_length state
+    
+      dff vram_refresh_ctr[12]; //counter for the vram refresh for the default screen
+      dff score[32];          //score for the game
+      dff random_num[10];     // random number between 0 and 951
+      dff calc_counter[5];    //to record down how many clock cycles has been through for the calculation stage
+    
+      dff debug_read_ctr;      //for debugging purposes
+    
       dff r1[16];
       dff r2[16];
       dff r3[16];
@@ -76,7 +77,9 @@ module snake_fsm (
   sig mul_a[10];
   sig mul_b[6];
  
-  sig reg_val[16];  
+  sig reg_val[16]; 
+
+  sig score_decoder_input[27]; 
 
   const START_POS = 10d460;             //starting position for the snake's head
   //const START_POS = 10d950;
@@ -85,7 +88,11 @@ module snake_fsm (
   const DIE_POS = 1350;                   //position of the die string
   const DIE_LEN = 9;                      //length of the die string
 
+  const SCORE_ADDR_START = 872;           //start address of the score counter 
+
   const DELAY_VAL = 2500000;             //delay time for the delay counter
+
+  const FRUIT_SCORE = 10;
 
   const SNAKE_SHAPE = d219;
   const FRUIT_SHAPE = d177;
@@ -93,16 +100,17 @@ module snake_fsm (
   const EMPTY_SHAPE = d0;
   const SMILEY_SHAPE = d1;
 
+  const FRUIT_SHAPE_MELON = d224;             //0xE0
 
-  const SCORE = $reverse("     SCORE");
-  const COURSE = $reverse(" 50.002 CS");
-  const SNAKE = $reverse("     SNAKE");
-  const BY = $reverse(" BY       ");
-  const JOSEPH = $reverse("    JOSEPH");
-  const SENRUI = $reverse("    SENRUI");
-  const SHAWN = $reverse("     SHAWN");
-  const XULIANG = $reverse("   XULIANG");
-  const ZEFAN = $reverse("     ZEFAN");
+  const SCORE =   $reverse("     SCORE");
+  const COURSE =  $reverse(" 50.002 CS");
+  const SNAKE =   $reverse("     SNAKE");
+  const BY =      $reverse(" By       ");
+  const JOSEPH =  $reverse("    JOSEPH");
+  const SENRUI =  $reverse("    Senrui");
+  const SHAWN =   $reverse("     Shawn");
+  const XULIANG = $reverse("  Xu Liang");
+  const ZEFAN =   $reverse("     Zefan");
 
   const OVER = $reverse("GAME OVER");
   
@@ -118,11 +126,12 @@ module snake_fsm (
     .address(ram_addr)
   ); 
   
- // pn_gen random(
- //   .clk(clk),
-  //  .rst(rst),
- //   .seed(32h0)      //not used
- // );
+ pn_gen random(
+    .clk(clk),
+    .rst(rst),
+    .next(1),
+    .seed(32h0)      //not used
+  );
   
   //decoder decoder(
   //  #WIDTH(4),
@@ -144,6 +153,11 @@ module snake_fsm (
     .b(mul_b)
     );
   
+  bin_to_dec score_decoder(
+    #DIGITS(8),
+    #LEADING_ZEROS(1),
+    .value(score_decoder_input)
+  );
   
   direction_lut direction_lut; 
   alu_simple alu;
@@ -179,6 +193,7 @@ module snake_fsm (
             ram_addr = debug_addr;
             debug_read_data = disp_game_mem.read_data;
             debug_read_ready = 1;
+
           default:
             debug_read_ready = 0;
             debug_read_data = 10b0; 
@@ -188,17 +203,20 @@ module snake_fsm (
     else{
     
       
-                alu.a = 16bz;
-          alu.b = 16bz;
-          alu.alufn = 6bz;
+      alu.a = 16bz;
+      alu.b = 16bz;
+      alu.alufn = 6bz;
       
       debug_read_ready = 0;
       debug_read_data = 10b0;    
       debug_read_ctr.d = 0;
       
+      score_decoder_input = score.q;
+
       case(state.q){
         
         state.START_SCREEN:
+          direction.d = 16b0100;                    //going right at start
           direction_lut.dir_state = 16bz;
           alu.a = 16bz;
           alu.b = 16bz;
@@ -211,12 +229,9 @@ module snake_fsm (
           if(left_button || right_button || up_button || down_button){      //go to next state
             vram_wr_en = 0;
             ram_wr_en = 0;
-            direction.d = 16b0100;                    //going right at start
-            ram_write.d = 0;
             ram_write_counter.d = 0;
-            vram_refresh.d = 0;
-            vram_refresh_ctr.d = 0;
-            state.d = state.DRAW_START;
+            random_num.d = random.num[9:0];
+            state.d = state.GEN_FRUIT;
           }
             
           if (~ram_clear.q){
@@ -239,35 +254,41 @@ module snake_fsm (
           }
 
           if (ram_write.q){                        //this is to be written AFTER the ram has been initialised (wiped)
+            
             case(ram_write_counter.q){
-              3d0:
+              
+              0:
                 ram_wr_en = 1;
                 ram_addr = START_POS;
                 ram_wr_data = c{2b11, 4b0001, 10b0};                  //store the block in front of it (nothing)
                 vram_temp_reg_0.d = c{2b11, 4b0001, ram_addr};
+                vram_temp_reg.d[ram_write_counter.q] = c{2b11, 4b0001, ram_addr};   //test function
                 head_address.d = c{2b11, 4b0001, ram_addr};
                 previous_head.d = c{2b11, 4b0001, ram_addr};
                 ram_write_counter.d = ram_write_counter.q + 1;
-            3d1:
+              1:
                 ram_wr_en = 1;
                 reg_val = START_POS - d1;
                 ram_addr = reg_val[9:0];
                 ram_wr_data = c{2b11, 4b0001, START_POS};             //store the block in front of it
                 vram_temp_reg_1.d = c{2b11, 4b0001, ram_addr};
+                vram_temp_reg.d[ram_write_counter.q] = c{2b11, 4b0001, ram_addr};   //test function
                 ram_write_counter.d = ram_write_counter.q + 1;
-            3d2:
+              2:
                 ram_wr_en = 1;
                 reg_val = START_POS - d2;
                 ram_addr = reg_val[9:0];
                 ram_wr_data = c{2b11, 4b0001, ram_addr+1};            //store the block in front of it
                 vram_temp_reg_2.d = c{2b11, 4b0001, ram_addr};
+                vram_temp_reg.d[ram_write_counter.q] = c{2b11, 4b0001, ram_addr};   //test function
                 ram_write_counter.d = ram_write_counter.q + 1;
-            3d3:
+              3:
                 ram_wr_en = 1;
                 reg_val = START_POS - d3;
                 ram_addr = reg_val[9:0];
                 ram_wr_data = c{2b11, 4b0001, ram_addr+1};            //store the block in front of it
                 vram_temp_reg_3.d = c{2b11, 4b0001, ram_addr};
+                vram_temp_reg.d[ram_write_counter.q] = c{2b11, 4b0001, ram_addr};   //test function
                 tail_address.d = c{2b11, 4b0001, ram_addr};           //edited
                 previous_tail.d = c{2b11, 4b0001, ram_addr};          //edited
                 ram_write.d = 0;                    // deassert ram_write
@@ -312,7 +333,7 @@ module snake_fsm (
                     else if(vram_refresh_ctr.q >=790 && vram_refresh_ctr.q <= 799){ // row 10
                       vram_wr_data = SCORE[vram_refresh_ctr.q -790];
                     }
-                    else if(vram_refresh_ctr.q >=870 && vram_refresh_ctr.q <= 879){ // row 11
+                    else if(vram_refresh_ctr.q >=872 && vram_refresh_ctr.q <= 879){ // row 11
                       vram_wr_data = SCOREVAL[vram_refresh_ctr.q -870];
                     }                    
                     else if(vram_refresh_ctr.q >=1510 && vram_refresh_ctr.q <= 1519){ // row 19
@@ -354,7 +375,56 @@ module snake_fsm (
             }else{
                 vram_wr_en = 0;
             }
+
+        state.GEN_FRUIT:
+          debugreg.d = hfe;
           
+          if(random_num.q > 951 ){
+              vram_wr_en = 0;
+              ram_wr_en = 0;
+              ram_write_counter.d = 0;
+              random_num.d = random.num[9:0];
+              state.d = state.GEN_FRUIT;
+            }else{
+              case(ram_write_counter.q){
+                0:
+                  ram_addr = random_num.q;
+                  vram_wr_en = 0;
+                  ram_wr_en = 0;
+                  ram_write_counter.d = 1;
+                1:
+                  ram_addr = random_num.q;
+                  r4.d = disp_game_mem.read_data;
+                  //if (r4.q[15] != 0 && r4.q[14] != 0){
+                  if (disp_game_mem.read_data[15:14] == 0){
+                    vram_wr_en = 0;
+                    ram_wr_en = 1;
+                    ram_wr_data = c{2b01,14b0};
+                    vram_temp_reg_8.d = c{6b010001,ram_addr};
+                    vram_temp_reg.d[8] = c{6b010001,ram_addr};    //for testing
+                  
+                    
+                    ram_write.d = 0;
+                    ram_write_counter.d = 0;
+                    vram_refresh.d = 0;
+                    vram_refresh_ctr.d = 0;
+                    state.d = state.DRAW_START;
+                  
+                  
+                      
+                  }else{
+                    vram_wr_en = 0;
+                    ram_wr_en = 0;
+                    random_num.d = random.num[9:0];
+                    state.d = state.GEN_FRUIT;
+                    ram_write_counter.d = 0;
+                  }
+                  
+                
+                }
+          }  
+
+
         state.DRAW_START:
           direction_lut.dir_state = 16bz;
           alu.a = 16bz;
@@ -363,16 +433,13 @@ module snake_fsm (
           debugreg.d = 2;
           vram_wr_en = 0;
           ram_wr_en = 0;
-          if(ram_write_counter.q >= 4){           //if we scanned through all values
-            state.d = state.WAIT_INPUT;
-            vram_refresh_ctr.d = 0;                  //reset the vram counter used
-            ram_write_counter.d = 0;                //reset the game ram counter
-            ram_write.d = 1;                        //clear the counter and then disable writting
-            input_counter.d = 0;                    //clear the input counter
-            ram_read.d = 0;                          //clear the ram read counter
-            user_input.d = 0;                        //clear the user input
+          if(ram_write_counter.q == 15){           //if we scanned through all values
+            state.d = state.DRAW_SCORE;
+            vram_refresh_ctr.d = 0;
           }
           else{
+            reg_val = vram_temp_reg.q[ram_write_counter.q];     //for testing
+            if(0){                                 //for testing
             case(ram_write_counter.q){
             0:
               reg_val = vram_temp_reg_0.q;
@@ -385,6 +452,7 @@ module snake_fsm (
             default:
               reg_val = 0;
             }
+            }//for testing
             ram_addr = reg_val[9:0];
             if(reg_val[10]){                          //if there is a new address to be changed
               state.d = state.CALC;                   //jump to the CALC state
@@ -402,6 +470,8 @@ module snake_fsm (
           alu.b = 16bz;
           alu.alufn = 6bz; 
           debugreg.d = 3;
+          reg_val = vram_temp_reg.q[ram_write_counter.q];     //for testing
+          if(0){                                            //for testing
           case(ram_write_counter.q){
             0:
               reg_val = vram_temp_reg_0.q;
@@ -414,6 +484,7 @@ module snake_fsm (
             default:
               reg_val = 0;
           }
+          }//for testing
           vram_wr_en = 0;
           ram_wr_en = 0;
           ram_addr = reg_val[9:0];
@@ -444,7 +515,11 @@ module snake_fsm (
               dividend = ram_addr;
               mul_a = ram_addr;
               mul_b = 2;
-              r1.d = multiplier.p;
+              //r1.d = multiplier.p;
+              alu.alufn = b100010;
+              alu.a = ram_addr;
+              alu.b = 1;
+              r1.d = alu.alu;
               calc_counter.d = 4;
 
             4:
@@ -530,6 +605,8 @@ module snake_fsm (
           debugreg.d = 4;
           vram_wr_en = 0;
           ram_wr_en = 0;
+          reg_val = vram_temp_reg.q[ram_write_counter.q];     //for testing
+          if(0){                                            //for testing
           case(ram_write_counter.q){
             0:
               reg_val = vram_temp_reg_0.q;
@@ -541,7 +618,8 @@ module snake_fsm (
               reg_val = vram_temp_reg_3.q;
             default:
               reg_val = 0;
-            }
+          }
+          }//for testing
           ram_addr = reg_val[9:0];
           r3.d = r1.q + r2.q + 81;
           state.d = state.DRAW1;
@@ -555,6 +633,8 @@ module snake_fsm (
           ram_wr_en = 0;
           vram_wr_en = 1;
           vram_wr_addr = r3.q;
+          reg_val = vram_temp_reg.q[ram_write_counter.q];     //for testing
+          if(0){                                            //for testing
           case(ram_write_counter.q){
             0:
               reg_val = vram_temp_reg_0.q;
@@ -567,14 +647,15 @@ module snake_fsm (
             default:
               reg_val = 0;
           }
+          }//for testing
           if(reg_val[15:15] == 0 && reg_val[14:14] == 0){
             vram_wr_data = EMPTY_SHAPE;
           }else if(reg_val[15:15] == 0 && reg_val[14:14] == 1){
-            vram_wr_data = FRUIT_SHAPE;
+            vram_wr_data = FRUIT_SHAPE_MELON;                       //FRUIT_SHAPE
           }else if(reg_val[15:15] == 1 && reg_val[14:14] == 0){
             vram_wr_data = WALL_SHAPE;
           }else if(reg_val[15:15] == 1 && reg_val[14:14] == 1){
-            vram_wr_data = SNAKE_SHAPE;
+            vram_wr_data = SNAKE_SHAPE;                    //SNAKE_SHAPE         //for testing melon
           }else{
             vram_wr_data = SMILEY_SHAPE; 
           }
@@ -582,13 +663,14 @@ module snake_fsm (
 
         state.ADD2:
           direction_lut.dir_state = 16bz;
-          alu.a = 16bz;
-          alu.b = 16bz;
-          alu.alufn = 6bz; 
+          alu.a = r3.q;
+          alu.b = 1;
+          alu.alufn = 6b0; 
           debugreg.d = 6;
           ram_wr_en = 0;
           vram_wr_en = 0;
-          r3.d = r3.q + 1;
+          //r3.d = r3.q + 1;
+          r3.d = alu.alu;
           state.d = state.DRAW2;
 
         state.DRAW2:
@@ -600,6 +682,9 @@ module snake_fsm (
           ram_wr_en = 0;
           vram_wr_en = 1;
           vram_wr_addr = r3.q;
+          reg_val = vram_temp_reg.q[ram_write_counter.q];       //for testing
+          vram_temp_reg.d[ram_write_counter.q] = 0;           //for testing
+          if(0){
           case(ram_write_counter.q){
             0:
               reg_val = vram_temp_reg_0.q;
@@ -614,21 +699,42 @@ module snake_fsm (
               reg_val = vram_temp_reg_3.q;
               vram_temp_reg_3.d = 0;
           }
-          
+          }                                                     //for testing
           if(reg_val[15:15] == 0 && reg_val[14:14] == 0){
             vram_wr_data = EMPTY_SHAPE;
           }else if(reg_val[15:15] == 0 && reg_val[14:14] == 1){
-            vram_wr_data = FRUIT_SHAPE;
+            vram_wr_data = FRUIT_SHAPE_MELON + 1;                   //FRUIT_SHAPE
           }else if(reg_val[15:15] == 1 && reg_val[14:14] == 0){
             vram_wr_data = WALL_SHAPE;
           }else if(reg_val[15:15] == 1 && reg_val[14:14] == 1){
-            vram_wr_data = SNAKE_SHAPE;
+            vram_wr_data = SNAKE_SHAPE;                    //         //for testing melon
           }else{
             vram_wr_data = SMILEY_SHAPE; 
           }
           ram_write_counter.d = ram_write_counter.q + 1; 
           state.d = state.DRAW_START;
             
+
+        state.DRAW_SCORE:
+          debugreg.d = state.DRAW_SCORE;
+          if(vram_refresh_ctr.q < 8){
+            vram_wr_en = 1;
+            vram_wr_addr = SCORE_ADDR_START + vram_refresh_ctr.q;
+            vram_wr_data = 48 + score_decoder.digits[7-vram_refresh_ctr.q];                   //write with offset from the code page CP437
+            vram_refresh_ctr.d = vram_refresh_ctr.q + 1;
+          }
+          else if (vram_refresh_ctr.q == 8){
+            vram_wr_en = 0;
+            vram_refresh_ctr.d = 0;                  //reset the vram counter used
+            ram_write_counter.d = 0;                //reset the game ram counter
+            ram_write.d = 1;                        //clear the counter and then disable writting
+            input_counter.d = 0;                    //clear the input counter
+            ram_read.d = 0;                          //clear the ram read counter
+            user_input.d = 0;                        //clear the user input
+            state.d = state.WAIT_INPUT;
+          } 
+
+
         state.WAIT_INPUT: 
 
           debugreg.d = 8;
@@ -658,12 +764,13 @@ module snake_fsm (
                     //alu -1 / -34
                     alu.alufn = 6b000001; // Set ALU to MIN
                     alu.a = head_address.q; // Set input 'a' of ALU to current head_address
+                    ram_addr = alu.alu;
                     if(direction_lut.travel_dir == 4b1000){          //left
                         alu.b = 1;
-                        ram_addr = head_address.q - 1;
+                        //ram_addr = head_address.q - 1;                        
                     }else if (direction_lut.travel_dir == 4b0010){    //up
                         alu.b = 34;
-                        ram_addr = head_address.q - 34;
+                        //ram_addr = head_address.q - 34;
                     }
 
               
@@ -672,12 +779,13 @@ module snake_fsm (
                     //alu 1 / 34
                     alu.alufn = 6b000000; // Set ALU to PLUS
                     alu.a = head_address.q; // Set input 'a' of ALU to current head_address
+                    ram_addr = alu.alu;
                     if(direction_lut.travel_dir == 4b0100){          //right
                         alu.b = 1;
-                        ram_addr = head_address.q + 1;
+                        //ram_addr = head_address.q + 1;
                     }else if (direction_lut.travel_dir == 4b0001){    //down
                         alu.b = 34; 
-                        ram_addr = head_address.q + 34;
+                        //ram_addr = head_address.q + 34;
                     }
               }else{
                     alu.a = 16bz;
@@ -792,6 +900,7 @@ module snake_fsm (
               ram_wr_en = 0;                                //supply with the vram tail address
               ram_addr = tail_address.q[9:0];
               vram_temp_reg_1.d = c{b000001,tail_address.q[9:0]};   //write the old tail into empty block
+              vram_temp_reg.d[1] = c{b000001,tail_address.q[9:0]};   //for testing 2d array
               keep_length_counter.d = 1;
             1:
               ram_wr_en = 1;                                //fetch the old tail value
@@ -816,7 +925,9 @@ module snake_fsm (
               ram_wr_data = 16b11000000000000;
               keep_length_counter.d = 0;
               vram_temp_reg_0.d = head_address.q;           //write the new head from empty into a snake body
+              vram_temp_reg.d[0] = head_address.q;          //for testing 2D array
               ram_write_counter.d = 0;
+              //score.d = 98765432;                         //for testing
               state.d = state.DRAW_START;
           }
 
@@ -829,26 +940,32 @@ module snake_fsm (
           alu.b = 16bz;
           alu.alufn = 6bz; 
           debugreg.d = hf;
-          ram_wr_en = 0;
+          //ram_wr_en = 0;
           vram_wr_en = 0;        
             // Keep tail position and update head postion
-            if(ram_write_counter.q == 0){
+            case(ram_write_counter.q){
+              0:  
                 snake_length.d = snake_length.q + 1;
                 ram_wr_en = 1;
                 ram_addr = head_address.q[9:0];
                 ram_wr_data = c{2b11, 4b0001, 10h0};
+                
                 ram_write_counter.d = 1;
-            }
-    
-            if(ram_write_counter.q == 1){
-                ram_addr = previous_head.q[9:0];
-                ram_wr_data = c{2b11, head_address.q[9:0]};
-                ram_write_counter.d = 2;
-            }
             
-            if(ram_write_counter.q == 2){
-                previous_head.d = head_address.q;
-                state.d = state.WAIT_INPUT;
+              1:
+                ram_wr_en = 1;
+                ram_addr = previous_head.q[9:0];
+                ram_wr_data = c{2b11,4b0001, head_address.q[9:0]};
+                ram_write_counter.d = 2;
+            
+              2:
+                ram_wr_en = 0;
+                vram_temp_reg_0.d =  c{2b11, 4b0001, head_address.q[9:0]};
+                vram_temp_reg.d[0] = c{2b11, 4b0001, head_address.q[9:0]};
+                //previous_head.d = head_address.q;
+                score.d = score.q + FRUIT_SCORE;
+                state.d = state.GEN_FRUIT;
+                random_num.d = random.num[9:0];
                 ram_write_counter.d = 0;
             }
             
@@ -882,6 +999,7 @@ module snake_fsm (
                 ram_clear.d = 0;
                 vram_refresh_ctr.d = 0;
                 ram_write.d = 1;
+                score.d = 0;
             }
             //random.next=0;                              //random number generator set
 
