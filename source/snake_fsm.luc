@@ -82,6 +82,11 @@ module snake_fsm (
   //const START_POS = 10d950;
   const TOTAL_BLOCKS = d952;              //total number of blocks for the snake
 
+  const DIE_POS = 1350;                   //position of the die string
+  const DIE_LEN = 9;                      //length of the die string
+
+  const DELAY_VAL = 2500000;             //delay time for the delay counter
+
   const SNAKE_SHAPE = d219;
   const FRUIT_SHAPE = d177;
   const WALL_SHAPE = d178;
@@ -146,9 +151,10 @@ module snake_fsm (
   always {
 
     debugled = debugreg.q;
+
     if (debug_en){
-        dividend = 10bz;
-    divisor = 6bz;
+      dividend = 10bz;
+      divisor = 6bz;
       mul_a = 10bz;
       mul_b = 6bz;
       direction_lut.dir_state = b0;
@@ -180,6 +186,12 @@ module snake_fsm (
       }
     }
     else{
+    
+      
+                alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz;
+      
       debug_read_ready = 0;
       debug_read_data = 10b0;    
       debug_read_ctr.d = 0;
@@ -187,6 +199,11 @@ module snake_fsm (
       case(state.q){
         
         state.START_SCREEN:
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz;  
+          debugreg.d = 1;
           snake_length.d = d4; // Initial snake length is 4
           //random.next = d1;
           head_address.d = START_POS;
@@ -194,7 +211,7 @@ module snake_fsm (
           if(left_button || right_button || up_button || down_button){      //go to next state
             vram_wr_en = 0;
             ram_wr_en = 0;
-            direction.d = 16b0100;
+            direction.d = 16b0100;                    //going right at start
             ram_write.d = 0;
             ram_write_counter.d = 0;
             vram_refresh.d = 0;
@@ -339,6 +356,11 @@ module snake_fsm (
             }
           
         state.DRAW_START:
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
+          debugreg.d = 2;
           vram_wr_en = 0;
           ram_wr_en = 0;
           if(ram_write_counter.q >= 4){           //if we scanned through all values
@@ -375,6 +397,11 @@ module snake_fsm (
           }
 
         state.CALC:
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
+          debugreg.d = 3;
           case(ram_write_counter.q){
             0:
               reg_val = vram_temp_reg_0.q;
@@ -496,6 +523,11 @@ module snake_fsm (
           }
 
         state.ADD1:
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
+          debugreg.d = 4;
           vram_wr_en = 0;
           ram_wr_en = 0;
           case(ram_write_counter.q){
@@ -515,6 +547,11 @@ module snake_fsm (
           state.d = state.DRAW1;
 
         state.DRAW1:
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
+          debugreg.d = 5;
           ram_wr_en = 0;
           vram_wr_en = 1;
           vram_wr_addr = r3.q;
@@ -544,12 +581,22 @@ module snake_fsm (
           state.d = state.ADD2;
 
         state.ADD2:
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
+          debugreg.d = 6;
           ram_wr_en = 0;
           vram_wr_en = 0;
           r3.d = r3.q + 1;
           state.d = state.DRAW2;
 
         state.DRAW2:
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
+          debugreg.d = 7;
           ram_wr_en = 0;
           vram_wr_en = 1;
           vram_wr_addr = r3.q;
@@ -582,16 +629,19 @@ module snake_fsm (
           ram_write_counter.d = ram_write_counter.q + 1; 
           state.d = state.DRAW_START;
             
-        state.WAIT_INPUT:
+        state.WAIT_INPUT: 
+
+          debugreg.d = 8;
           ram_wr_en = 0;
           vram_wr_en = 0;
             // Only update user_input register if a button has been pressed
             // Otherwise keep the previous direction
             if(c{left_button, right_button, up_button, down_button} != 0){
                 user_input.d = c{left_button, right_button, up_button, down_button};
+            
             }
 
-            if(input_counter.q == 25000000){
+            if(input_counter.q == DELAY_VAL){
                 //user_input.d = c{12h0, left_button, right_button, up_button, down_button};
                 //direction_lut.dir_state = c{left_button, right_button, up_button, down_button,direction.q[3:0]};
                 //if(direction_lut.travel_dir != 4b0000){ // Only update new direction if the user press something
@@ -599,38 +649,50 @@ module snake_fsm (
                 //    direction.d = c{12h0, direction_lut.travel_dir};
                 //}
 
-                direction_lut.dir_state = c{direction.q, user_input.q};
+                direction_lut.dir_state = c{direction.q[3:0], user_input.q[3:0]};
                 
 
                 // Compute location of next head block
 
-              if(direction_lut.travel_dir == 4b1000 || direction_lut.travel_dir == 4b0001){
+              if(direction_lut.travel_dir == 4b1000 || direction_lut.travel_dir == 4b0010){
                     //alu -1 / -34
                     alu.alufn = 6b000001; // Set ALU to MIN
                     alu.a = head_address.q; // Set input 'a' of ALU to current head_address
-                    if(direction_lut.travel_dir == 4b1000){
+                    if(direction_lut.travel_dir == 4b1000){          //left
                         alu.b = 1;
                         ram_addr = head_address.q - 1;
-                    }else if (direction_lut.travel_dir == 4b0001){
+                    }else if (direction_lut.travel_dir == 4b0010){    //up
                         alu.b = 34;
                         ram_addr = head_address.q - 34;
                     }
 
               
 
-              }else if (direction_lut.travel_dir == 4b0100 || direction_lut.travel_dir == 4b0010){
+              }else if (direction_lut.travel_dir == 4b0100 || direction_lut.travel_dir == 4b0001){
                     //alu 1 / 34
                     alu.alufn = 6b000000; // Set ALU to PLUS
                     alu.a = head_address.q; // Set input 'a' of ALU to current head_address
-                    if(direction_lut.travel_dir == 4b0100){
+                    if(direction_lut.travel_dir == 4b0100){          //right
                         alu.b = 1;
                         ram_addr = head_address.q + 1;
-                    }else if (direction_lut.travel_dir == 4b0010){
+                    }else if (direction_lut.travel_dir == 4b0001){    //down
                         alu.b = 34; 
                         ram_addr = head_address.q + 34;
                     }
+              }else{
+                    alu.a = 16bz;
+                  alu.b = 16bz;
+                  alu.alufn = 6bz; 
               }
-              debugreg.d = alu.alu[15:9];
+
+              if(ram_addr > 951){
+                state.d = state.GAMEOVER;
+                vram_refresh.d = 0;             //enable refresh
+                vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position 
+              }
+
+
+              //debugreg.d = alu.alu[15:9];
               case(ram_read.q){
                 0:
                   //ram_addr = alu.alu;
@@ -644,41 +706,84 @@ module snake_fsm (
                   direction.d = c{12h0, direction_lut.travel_dir};
                   state.d = state.COMPARE_STATE;
                   input_counter.d = 0;
+                  ram_read.d = 0;
+              
               }
             
             }else{
                 input_counter.d = input_counter.q + 1;
+            direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
             }
             //random.next=0;                              //random number generator set
             
         
         state.COMPARE_STATE:
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz;           
+          debugreg.d = 9;
           ram_wr_en = 0;
           vram_wr_en = 0;
             // Possible block states
             // 2b00 = empty block
             // 2b01 = food
             // 2b10/11 = wall/edge(snake)
-            if(head_address.q[15:14] == 2b00){
-                head_address.d = c{b110001,head_address.q[9:0]}; 
+            if((head_address.q >= 0 && head_address.q <= 33 )&&(direction.q == 4b0001)){//down    
+                      state.d = state.GAMEOVER;
+                      vram_refresh.d = 0;             //enable refresh
+                      vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position                         
+            }
+            else if((head_address.q >= 918 && head_address.q <= 951)&&(direction.q == 4b0010)){//up 
+                      state.d = state.GAMEOVER;
+                      vram_refresh.d = 0;             //enable refresh
+                      vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position                      
+            }
+            else if((head_address.q - 34 * (head_address.q / 34) == 0)&&(direction.q == 4b0100)){//right    
+                      state.d = state.GAMEOVER;
+                      vram_refresh.d = 0;             //enable refresh
+                      vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position                      
+            }
+            else if((head_address.q - 34 * (head_address.q / 34) == 33) && (direction.q == 4b1000)){//left    
+                      state.d = state.GAMEOVER;
+                      vram_refresh.d = 0;             //enable refresh
+                      vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position
+            }
+            else{
+              if(head_address.q[15:14] == 2b00){
+                head_address.d = c{b110001,head_address.q[9:0]};      //new head after detection
                 
                 keep_length_counter.d = 0;
                 state.d = state.KEEP_LENGTH;
                 //update tail and all body blocks
-            }
-            else if(head_address.q[15:14] == 2b01){
+              }
+              else if(head_address.q[15:14] == 2b01){
                 state.d = state.GROW;
+                ram_write_counter.d = 0;
                 //Update body blocks only
-            }
-            else{
+              }
+              else{
                 state.d = state.GAMEOVER;
                 vram_refresh.d = 0;             //enable refresh
-                vram_refresh_ctr.d = 1150;
+                vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position
+              }
+
+
             }
+            
+            
+
             //random.next=0;
         
         state.KEEP_LENGTH:
-          
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
+          debugreg.d = hf0;
           vram_wr_en = 0;      
           // Update head and tail position
           // Update game state of head block in ram to snake
@@ -686,6 +791,7 @@ module snake_fsm (
             0:
               ram_wr_en = 0;                                //supply with the vram tail address
               ram_addr = tail_address.q[9:0];
+              vram_temp_reg_1.d = c{b000001,tail_address.q[9:0]};   //write the old tail into empty block
               keep_length_counter.d = 1;
             1:
               ram_wr_en = 1;                                //fetch the old tail value
@@ -701,7 +807,7 @@ module snake_fsm (
             3:                                              //write the data back to the head address
               ram_wr_en = 1;
               ram_addr = previous_head.q[9:0];
-              ram_wr_data = c{b110000, head_address.q[9:0]};
+              ram_wr_data = c{b110000, head_address.q[9:0]};    //written_bit just set to zero
               keep_length_counter.d = 4;
             
             4:
@@ -709,7 +815,7 @@ module snake_fsm (
               ram_addr = head_address.q[9:0];
               ram_wr_data = 16b11000000000000;
               keep_length_counter.d = 0;
-              vram_temp_reg_0.d = head_address.q;
+              vram_temp_reg_0.d = head_address.q;           //write the new head from empty into a snake body
               ram_write_counter.d = 0;
               state.d = state.DRAW_START;
           }
@@ -718,38 +824,49 @@ module snake_fsm (
             //random.next=0;
         
         state.GROW:
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
+          debugreg.d = hf;
           ram_wr_en = 0;
           vram_wr_en = 0;        
             // Keep tail position and update head postion
-            if(ram_write_counter.q == 3b000){
+            if(ram_write_counter.q == 0){
                 snake_length.d = snake_length.q + 1;
                 ram_wr_en = 1;
                 ram_addr = head_address.q[9:0];
                 ram_wr_data = c{2b11, 4b0001, 10h0};
-                ram_write_counter.d = ram_write_counter.q + 1;
+                ram_write_counter.d = 1;
             }
     
-            if(ram_write_counter.q == 3b001){
+            if(ram_write_counter.q == 1){
                 ram_addr = previous_head.q[9:0];
                 ram_wr_data = c{2b11, head_address.q[9:0]};
-                ram_write_counter.d = ram_write_counter.q + 1;
+                ram_write_counter.d = 2;
             }
             
-            if(ram_write_counter.q == 3b010){
+            if(ram_write_counter.q == 2){
                 previous_head.d = head_address.q;
+                state.d = state.WAIT_INPUT;
                 ram_write_counter.d = 0;
             }
             
-            state.d = state.WAIT_INPUT;
+            
             //random.next=0;
         
         state.GAMEOVER:
-              
+          direction_lut.dir_state = 16bz;
+          alu.a = 16bz;
+          alu.b = 16bz;
+          alu.alufn = 6bz; 
+            debugreg.d = haa;
             if(~vram_refresh.q){
                 vram_wr_en = 1;
                 vram_wr_addr = vram_refresh_ctr.q;
-                vram_wr_data = OVER[vram_refresh_ctr.q-1150];
-                if(vram_refresh_ctr.q == 1157){
+                vram_wr_data = OVER[vram_refresh_ctr.q-DIE_POS];
+                vram_refresh_ctr.d = vram_refresh_ctr.q + 1;
+                if(vram_refresh_ctr.q == DIE_POS+DIE_LEN){
                     vram_refresh.d = 1;
                     vram_refresh_ctr.d = 0;
                 }
@@ -761,8 +878,10 @@ module snake_fsm (
 
             if (left_button||right_button||up_button||down_button){
                 state.d = state.START_SCREEN;
-                vram_refresh.d = 1;
+                vram_refresh.d = 0;
+                ram_clear.d = 0;
                 vram_refresh_ctr.d = 0;
+                ram_write.d = 1;
             }
             //random.next=0;                              //random number generator set
 
@@ -775,10 +894,7 @@ module snake_fsm (
             alu.b = 16h0;
             alu.alufn = 6h0;       
     }
-    direction_lut.dir_state = c{left_button, right_button, up_button, down_button,direction.q[3:0]};
-    alu.a = 16h0;
-    alu.b = 16h0;
-    alu.alufn = 6h0;    
+  
   }
           
       }

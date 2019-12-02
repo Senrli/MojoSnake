@@ -65,6 +65,15 @@ module mojo_top (
     button_conditioner b_left_b_button(.in(b_left_b));
     button_conditioner b_right_a_button(.in(b_right_a));
     button_conditioner b_right_b_button(.in(b_right_b));
+
+    edge_detector b_up_a_edge(#RISE(1), #FALL(0),.in(b_up_a_button.out));
+    edge_detector b_up_b_edge(#RISE(1), #FALL(0),.in(b_up_b_button.out));
+    edge_detector b_down_a_edge(#RISE(1), #FALL(0),.in(b_down_a_button.out));
+    edge_detector b_down_b_edge(#RISE(1), #FALL(0),.in(b_down_b_button.out));
+    edge_detector b_left_a_edge(#RISE(1), #FALL(0),.in(b_left_a_button.out));
+    edge_detector b_left_b_edge(#RISE(1), #FALL(0),.in(b_left_b_button.out));
+    edge_detector b_right_a_edge(#RISE(1), #FALL(0),.in(b_right_a_button.out));
+    edge_detector b_right_b_edge(#RISE(1), #FALL(0),.in(b_right_b_button.out));
     
     .rst(rst){
       avr_interface avr;
@@ -94,10 +103,10 @@ module mojo_top (
   snake_fsm snake(
     .rst(rst),
     .clk(clkgen.clk_25),
-    .left_button(b_left_a_button.out),
-    .right_button(b_right_a_button.out),
-    .up_button(b_up_a_button.out),
-    .down_button(b_down_a_button.out),
+    .left_button(b_left_a_edge.out),
+    .right_button(b_right_a_edge.out),
+    .up_button(b_up_a_edge.out),
+    .down_button(b_down_a_edge.out),
     .debug_en(debug_en),
     .debug_wr_en(debug_wr_en),
     .debug_addr(debug_addr),

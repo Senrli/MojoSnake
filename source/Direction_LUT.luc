@@ -25,12 +25,12 @@ module direction_lut (
       8b00010010: travel_dir = 4b0001; // DU: D 
       8b00010001: travel_dir = 4b0001; // DD: D
       
-      8b00001000: travel_dir = 4b1000; // XL: L 
-      8b00000100: travel_dir = 4b0100; // XR: R 
-      8b00000010: travel_dir = 4b0010; // XU: U 
-      8b00000001: travel_dir = 4b0001; // XD: D
+      //8b10000000: travel_dir = 4b1000; // LX: L 
+      //8b01000000: travel_dir = 4b0100; // RX: R 
+      //8b00100000: travel_dir = 4b0010; // UX: U 
+      //8b00010000: travel_dir = 4b0001; // DX: D
     
-      default: travel_dir = dir_state[3:0];      
+      default: travel_dir = dir_state[7:4];      
     }
   }
 }
