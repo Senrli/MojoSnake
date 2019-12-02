@@ -213,6 +213,8 @@ module mojo_top (
     vga_blk = vga.o_blk;
     vga_clk = vga.o_clk;
     
+    led = snake.debugled;
+    
     
     
   }

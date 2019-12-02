@@ -30,7 +30,7 @@ module direction_lut (
       8b00000010: travel_dir = 4b0010; // XU: U 
       8b00000001: travel_dir = 4b0001; // XD: D
     
-      default: travel_dir = 4b0000;      
+      default: travel_dir = dir_state[3:0];      
     }
   }
 }
