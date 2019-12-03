@@ -1,51 +1,49 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project name="MojoSnake" board="Mojo" language="Lucid" version="2">
   <files>
-    <component>cclk_detector.luc</component>
-    <component>reg_interface.luc</component>
-    <component>pipeline.luc</component>
-    <component>uart_rx.luc</component>
-    <src>vga_cga.luc</src>
-    <component>counter.luc</component>
-    <src top="true">mojo_top.luc</src>
     <component>spi_slave.luc</component>
-    <src>vga_0816_rom_80ff.luc</src>
-    <src>fa.luc</src>
-    <component>sdram.luc</component>
-    <component>reg_interface_debug.luc</component>
+    <component>simple_dual_ram.v</component>
+    <src>snake_fsm.luc</src>
+    <src>vga_cga.luc</src>
+    <src>vram.luc</src>
+    <component>uart_rx.luc</component>
     <component>memory_bus.luc</component>
+    <component>pn_gen.luc</component>
+    <component>avr_interface.luc</component>
+    <component>uart_tx.luc</component>
+    <component>simple_ram.v</component>
+    <component>pipeline.luc</component>
+    <component>counter.luc</component>
+    <src>fa.luc</src>
+    <src>vga_0816_rom_cga.luc</src>
     <component>reset_conditioner.luc</component>
     <src>hex_shift.luc</src>
-    <component>button_conditioner.luc</component>
-    <component>avr_interface.luc</component>
-    <src>vga_0816_rom.luc</src>
-    <src>serial_to_vga.luc</src>
-    <component>simple_dual_ram.v</component>
-    <src>vram.luc</src>
-    <src>vga_0816_rom_007f.luc</src>
-    <src>hex_add.luc</src>
-    <component>pwm.luc</component>
-    <component>decoder.luc</component>
-    <src>vga_0816_rom_cga.luc</src>
-    <src>alu_simple.luc</src>
+    <component>reg_interface_debug.luc</component>
     <src>vga.luc</src>
-    <src>direction_lut.luc</src>
-    <src>hex_cmp.luc</src>
-    <src>snake_fsm.luc</src>
-    <src>hex_boole.luc</src>
-    <component>uart_tx.luc</component>
-    <component>pn_gen.luc</component>
-    <component>bin_to_dec.luc</component>
-    <component>simple_ram.v</component>
+    <component>reg_interface.luc</component>
+    <src>serial_to_vga.luc</src>
+    <src>hex_add.luc</src>
+    <component>decoder.luc</component>
     <component>wave_capture.luc</component>
-    <src>wave_out.luc</src>
-    <component>edge_detector.luc</component>
+    <src>hex_boole.luc</src>
+    <src>direction_lut.luc</src>
     <src>vram_cga.luc</src>
-    <constraint>sound.ucf</constraint>
-    <constraint>keys.ucf</constraint>
-    <constraint>clk_divider.ucf</constraint>
+    <component>bin_to_dec.luc</component>
+    <src>vga_0816_rom_007f.luc</src>
+    <component>pwm.luc</component>
+    <component>cclk_detector.luc</component>
+    <src>alu_simple.luc</src>
+    <src>vga_0816_rom_80ff.luc</src>
+    <component>sdram.luc</component>
+    <component>edge_detector.luc</component>
+    <src top="true">mojo_top.luc</src>
+    <src>vga_0816_rom.luc</src>
+    <src>hex_cmp.luc</src>
+    <component>button_conditioner.luc</component>
     <constraint>VGA.ucf</constraint>
+    <constraint>keys.ucf</constraint>
     <constraint lib="true">mojo.ucf</constraint>
+    <constraint>clk_divider.ucf</constraint>
     <core name="multiplier">
       <src>..\multiplier.ngc</src>
       <src>..\multiplier.v</src>

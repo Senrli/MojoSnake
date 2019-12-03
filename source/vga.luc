@@ -131,8 +131,8 @@ module vga(
     
     o_blk = h_count.q >= HA_STA;
     
-		char_row = o_y/16;
-		char_col = o_x/8;
+		char_row = o_y/16;                    //get the row index 
+		char_col = o_x/8;                     //get the column index
 		
 		char_y = o_y- char_row*16;
 		char_x = o_x- char_col*8 -1;

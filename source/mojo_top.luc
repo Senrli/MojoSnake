@@ -31,11 +31,8 @@ module mojo_top (
     input b_left_a,
     input b_left_b,
     input b_right_a,
-    input b_right_b,
+    input b_right_b
     
-    output sq_out,
-    output saw_out,
-    output tri_out
     
   ) {
   
@@ -82,7 +79,7 @@ module mojo_top (
     .rst(rst){
       avr_interface avr;
       reg_interface register;
-      wave_out wave_out;
+      //wave_out wave_out;
     }
   }
   
@@ -229,9 +226,9 @@ module mojo_top (
     
     led = snake.debugled;
     
-    saw_out = wave_out.saw_out;
-    tri_out = wave_out.tri_out;
-    sq_out = wave_out.sq_out;
+    //saw_out = wave_out.saw_out;
+    //tri_out = wave_out.tri_out;
+    //sq_out = wave_out.sq_out;
     
   }
 }

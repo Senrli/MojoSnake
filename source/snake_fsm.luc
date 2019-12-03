@@ -10,7 +10,7 @@ module snake_fsm (
     output vram_wr_addr[12],    //output to vga vram module for write address
     output vram_wr_data[8],      //output to vga vram module for write data
     
-    input debug_en,
+    input debug_en,             //not used
     input debug_wr_en,
     input debug_addr[10],
     output debug_read_data[16],
@@ -52,26 +52,28 @@ module snake_fsm (
     
       dff vram_refresh_ctr[12]; //counter for the vram refresh for the default screen
       dff score[32];          //score for the game
-      dff random_num[10];     // random number between 0 and 951
+      dff random_num[10];     // random number between 0 and 1023(951)
       dff calc_counter[5];    //to record down how many clock cycles has been through for the calculation stage
     
       dff debug_read_ctr;      //for debugging purposes
-    
-      dff r1[16];
+      
+      //register to store temporary values
+      dff r1[16];        
       dff r2[16];
       dff r3[16];
-      dff r4[16];
+      dff r4[32];
       
+      //for debugging
       dff debugreg[8];
     }
   }
   
-  sig ram_wr_en;
-  sig ram_addr[10];
-  sig ram_wr_data[16];
+  sig ram_wr_en;            //game ram write enable signal
+  sig ram_addr[10];         //game ram address
+  sig ram_wr_data[16];      //game ram data
 
-
-  sig dividend[10];
+  //temporary signals
+  sig dividend[10];          
   sig divisor[6];
   
   sig mul_a[10];
@@ -93,30 +95,29 @@ module snake_fsm (
   const DELAY_VAL = 2500000;             //delay time for the delay counter
 
   const FRUIT_SCORE = 10;
-
+  
+  //ascii characters for display
   const SNAKE_SHAPE = d219;
   const FRUIT_SHAPE = d177;
   const WALL_SHAPE = d178;
   const EMPTY_SHAPE = d0;
   const SMILEY_SHAPE = d1;
-
   const FRUIT_SHAPE_MELON = d224;             //0xE0
-
-  const SCORE =   $reverse("     SCORE");
-  const COURSE =  $reverse(" 50.002 CS");
-  const SNAKE =   $reverse("     SNAKE");
-  const BY =      $reverse(" By       ");
-  const JOSEPH =  $reverse("    JOSEPH");
-  const SENRUI =  $reverse("    Senrui");
-  const SHAWN =   $reverse("     Shawn");
-  const XULIANG = $reverse("  Xu Liang");
-  const ZEFAN =   $reverse("     Zefan");
-
-  const OVER = $reverse("GAME OVER");
   
+  //start screen display strings
+  const SCORE =    $reverse("     SCORE");
+  const COURSE =   $reverse(" 50.002 CS");
+  const SNAKE =    $reverse("     SNAKE");
+  const BY =       $reverse(" By       ");
+  const JOSEPH =   $reverse("    JOSEPH");
+  const SENRUI =   $reverse("    SENRUI");
+  const SHAWN =    $reverse("     SHAWN");
+  const XULIANG =  $reverse("  XU LIANG");
+  const ZEFAN =    $reverse("     ZEFAN");
+  const OVER =     $reverse(" GAME OVER");  
   const SCOREVAL = $reverse("0000000000");
   
-  
+  //moudle to create game ram
   simple_ram disp_game_mem(
     #SIZE(16), 
     #DEPTH(TOTAL_BLOCKS),                //34*28
@@ -126,6 +127,7 @@ module snake_fsm (
     .address(ram_addr)
   ); 
   
+  //module to generate random number 
  pn_gen random(
     .clk(clk),
     .rst(rst),
@@ -138,7 +140,7 @@ module snake_fsm (
  //   .in(random.num[31:28])
   //);
   
-  
+  // divider and multiplier 
   div_gen_v3_0 divider(
     .clk(clk),
       .dividend(dividend),
@@ -159,8 +161,8 @@ module snake_fsm (
     .value(score_decoder_input)
   );
   
-  direction_lut direction_lut; 
-  alu_simple alu;
+  direction_lut direction_lut; //look-up-table to determine direction of snake travel
+  alu_simple alu;              //alu
   
   always {
 
@@ -215,18 +217,18 @@ module snake_fsm (
 
       case(state.q){
         
-        state.START_SCREEN:
-          direction.d = 16b0100;                    //going right at start
-          direction_lut.dir_state = 16bz;
+        state.START_SCREEN:                         //initial state
+          direction.d = 16b0100;                    //initial direction of snake travel == right
+          direction_lut.dir_state = 16bz;           
           alu.a = 16bz;
           alu.b = 16bz;
           alu.alufn = 6bz;  
           debugreg.d = 1;
-          snake_length.d = d4; // Initial snake length is 4
+          snake_length.d = d4;                       // Initial snake length is 4
           //random.next = d1;
-          head_address.d = START_POS;
+          head_address.d = START_POS;                
 
-          if(left_button || right_button || up_button || down_button){      //go to next state
+          if(left_button || right_button || up_button || down_button){      //game started, go to next state: GEN_FRUIT
             vram_wr_en = 0;
             ram_wr_en = 0;
             ram_write_counter.d = 0;
@@ -234,7 +236,7 @@ module snake_fsm (
             state.d = state.GEN_FRUIT;
           }
             
-          if (~ram_clear.q){
+          if (~ram_clear.q){                              //reset display(wipe)
             ram_wr_en = 1;
             ram_wr_data = 0;
             ram_addr = ram_clear_counter.q;
@@ -253,7 +255,7 @@ module snake_fsm (
             ram_addr = 0;                       //dont assert
           }
 
-          if (ram_write.q){                        //this is to be written AFTER the ram has been initialised (wiped)
+          if (ram_write.q){        //AFTER the ram has been initialised (wiped),render 4blocks as snake body,store, game ram content, head and tail addresses
             
             case(ram_write_counter.q){
               
@@ -291,7 +293,7 @@ module snake_fsm (
                 vram_temp_reg.d[ram_write_counter.q] = c{2b11, 4b0001, ram_addr};   //test function
                 tail_address.d = c{2b11, 4b0001, ram_addr};           //edited
                 previous_tail.d = c{2b11, 4b0001, ram_addr};          //edited
-                ram_write.d = 0;                    // deassert ram_write
+                ram_write.d = 0;                                      // deassert ram_write
                 ram_write_counter.d = 0;
            default:
                 ram_wr_en = 0;
@@ -301,8 +303,8 @@ module snake_fsm (
                 ram_write_counter.d = 0;
             }
           }
-
-            if (~vram_refresh.q){
+            
+            if (~vram_refresh.q){                   //initialise hardcoded characters for start screen display
                 vram_wr_en = 1;
                 if(vram_refresh_ctr.q < 2400){
                     vram_wr_addr = vram_refresh_ctr.q;
@@ -351,13 +353,13 @@ module snake_fsm (
                     else if(vram_refresh_ctr.q >=1990 && vram_refresh_ctr.q <= 1999){ // row 25
                       vram_wr_data = SENRUI[vram_refresh_ctr.q -1990];
                     }
-                    else if(vram_refresh_ctr.q >=2070 && vram_refresh_ctr.q <= 2079){ // row 24
+                    else if(vram_refresh_ctr.q >=2070 && vram_refresh_ctr.q <= 2079){ // row 26
                       vram_wr_data = SHAWN[vram_refresh_ctr.q -2070];
                     }
-                    else if(vram_refresh_ctr.q >=2150 && vram_refresh_ctr.q <= 2159){ // row 24
+                    else if(vram_refresh_ctr.q >=2150 && vram_refresh_ctr.q <= 2159){ // row 27
                       vram_wr_data = XULIANG[vram_refresh_ctr.q -2150];
                     }
-                    else if(vram_refresh_ctr.q >=2230 && vram_refresh_ctr.q <= 2239){ // row 24
+                    else if(vram_refresh_ctr.q >=2230 && vram_refresh_ctr.q <= 2239){ // row 28
                       vram_wr_data = ZEFAN[vram_refresh_ctr.q -2230];
                     }
                     else{
@@ -379,7 +381,7 @@ module snake_fsm (
         state.GEN_FRUIT:
           debugreg.d = hfe;
           
-          if(random_num.q > 951 ){
+          if(random_num.q > 951 ){                     //if random generated number is larger than game mempry, re-generate a number
               vram_wr_en = 0;
               ram_wr_en = 0;
               ram_write_counter.d = 0;
@@ -388,15 +390,15 @@ module snake_fsm (
             }else{
               case(ram_write_counter.q){
                 0:
-                  ram_addr = random_num.q;
+                  ram_addr = random_num.q;              //read data from game memory with address [random number]
                   vram_wr_en = 0;
                   ram_wr_en = 0;
                   ram_write_counter.d = 1;
                 1:
                   ram_addr = random_num.q;
-                  r4.d = disp_game_mem.read_data;
+                  r4.d = disp_game_mem.read_data;      
                   //if (r4.q[15] != 0 && r4.q[14] != 0){
-                  if (disp_game_mem.read_data[15:14] == 0){
+                  if (disp_game_mem.read_data[15:14] == 0){        //if the block is empty, render fruit on display
                     vram_wr_en = 0;
                     ram_wr_en = 1;
                     ram_wr_data = c{2b01,14b0};
@@ -408,11 +410,11 @@ module snake_fsm (
                     ram_write_counter.d = 0;
                     vram_refresh.d = 0;
                     vram_refresh_ctr.d = 0;
-                    state.d = state.DRAW_START;
+                    state.d = state.DRAW_START;                  //go to next state: DRAW_START after rendering fruit on display
                   
                   
                       
-                  }else{
+                  }else{                                           //if block is not empty, re-generate random number
                     vram_wr_en = 0;
                     ram_wr_en = 0;
                     random_num.d = random.num[9:0];
@@ -425,7 +427,7 @@ module snake_fsm (
           }  
 
 
-        state.DRAW_START:
+        state.DRAW_START:                          //render blocks on display
           direction_lut.dir_state = 16bz;
           alu.a = 16bz;
           alu.b = 16bz;
@@ -433,14 +435,14 @@ module snake_fsm (
           debugreg.d = 2;
           vram_wr_en = 0;
           ram_wr_en = 0;
-          if(ram_write_counter.q == 15){           //if we scanned through all values
+          if(ram_write_counter.q == 15){           //after scanning through all calues, go to next state: DRAW_SCORE
             state.d = state.DRAW_SCORE;
             vram_refresh_ctr.d = 0;
           }
           else{
             reg_val = vram_temp_reg.q[ram_write_counter.q];     //for testing
             if(0){                                 //for testing
-            case(ram_write_counter.q){
+            case(ram_write_counter.q){              
             0:
               reg_val = vram_temp_reg_0.q;
             1:
@@ -464,7 +466,7 @@ module snake_fsm (
 
           }
 
-        state.CALC:
+        state.CALC:                                    //states CALC, MUL1_1, MUL1_2, DIV1, ADD1 maps game ram address to vram address
           direction_lut.dir_state = 16bz;
           alu.a = 16bz;
           alu.b = 16bz;
@@ -515,8 +517,8 @@ module snake_fsm (
               dividend = ram_addr;
               mul_a = ram_addr;
               mul_b = 2;
-              //r1.d = multiplier.p;
-              alu.alufn = b100010;
+              //r1.d = multiplier.p;  
+              alu.alufn = b100010;      //bit shift left 
               alu.a = ram_addr;
               alu.b = 1;
               r1.d = alu.alu;
@@ -624,7 +626,7 @@ module snake_fsm (
           r3.d = r1.q + r2.q + 81;
           state.d = state.DRAW1;
 
-        state.DRAW1:
+        state.DRAW1:                      //from vram address, render left half of display block
           direction_lut.dir_state = 16bz;
           alu.a = 16bz;
           alu.b = 16bz;
@@ -648,16 +650,16 @@ module snake_fsm (
               reg_val = 0;
           }
           }//for testing
-          if(reg_val[15:15] == 0 && reg_val[14:14] == 0){
-            vram_wr_data = EMPTY_SHAPE;
+          if(reg_val[15:15] == 0 && reg_val[14:14] == 0){            //EMPTY_SHAPE
+            vram_wr_data = EMPTY_SHAPE;                             
           }else if(reg_val[15:15] == 0 && reg_val[14:14] == 1){
-            vram_wr_data = FRUIT_SHAPE_MELON;                       //FRUIT_SHAPE
+            vram_wr_data = FRUIT_SHAPE_MELON;                        //FRUIT_SHAPE
           }else if(reg_val[15:15] == 1 && reg_val[14:14] == 0){
             vram_wr_data = WALL_SHAPE;
           }else if(reg_val[15:15] == 1 && reg_val[14:14] == 1){
-            vram_wr_data = SNAKE_SHAPE;                    //SNAKE_SHAPE         //for testing melon
+            vram_wr_data = SNAKE_SHAPE;                              //SNAKE_SHAPE        
           }else{
-            vram_wr_data = SMILEY_SHAPE; 
+            vram_wr_data = SMILEY_SHAPE;                             //for debugging
           }
           state.d = state.ADD2;
 
@@ -673,7 +675,7 @@ module snake_fsm (
           r3.d = alu.alu;
           state.d = state.DRAW2;
 
-        state.DRAW2:
+        state.DRAW2:                        //from vram address, render right half of block
           direction_lut.dir_state = 16bz;
           alu.a = 16bz;
           alu.b = 16bz;
@@ -716,22 +718,60 @@ module snake_fsm (
             
 
         state.DRAW_SCORE:
-          debugreg.d = state.DRAW_SCORE;
-          if(vram_refresh_ctr.q < 8){
+          debugreg.d = state.DRAW_SCORE;                                                      //compare if vram refresh counter exceeds 7
+          alu.a = vram_refresh_ctr.q;                                                        
+          alu.b = d8;
+          alu.alufn = 6b110101;
+          if(alu.alu == 1){
             vram_wr_en = 1;
             vram_wr_addr = SCORE_ADDR_START + vram_refresh_ctr.q;
             vram_wr_data = 48 + score_decoder.digits[7-vram_refresh_ctr.q];                   //write with offset from the code page CP437
             vram_refresh_ctr.d = vram_refresh_ctr.q + 1;
           }
-          else if (vram_refresh_ctr.q == 8){
-            vram_wr_en = 0;
-            vram_refresh_ctr.d = 0;                  //reset the vram counter used
-            ram_write_counter.d = 0;                //reset the game ram counter
-            ram_write.d = 1;                        //clear the counter and then disable writting
-            input_counter.d = 0;                    //clear the input counter
-            ram_read.d = 0;                          //clear the ram read counter
-            user_input.d = 0;                        //clear the user input
-            state.d = state.WAIT_INPUT;
+          else if (alu.alu == 0){
+            //vram_wr_en = 0;
+            //vram_refresh_ctr.d = 0;                  //reset the vram counter used
+            //ram_write_counter.d = 0;                //reset the game ram counter
+            //ram_write.d = 1;                        //clear the counter and then disable writting
+            //input_counter.d = 0;                    //clear the input counter
+            //ram_read.d = 0;                          //clear the ram read counter
+            //user_input.d = 0;                        //clear the user input
+            //state.d = state.WAIT_INPUT;              //go to next state: WAIT_INPUT
+            if(score.q > 30 && score.q<= 70){
+              user_input.d = 0; 
+              vram_wr_en = 0;
+              vram_refresh_ctr.d = 0;                  //reset the vram counter used
+              ram_write_counter.d = 0;                //reset the game ram counter
+              ram_write.d = 1;                        //clear the counter and then disable writting
+              input_counter.d = 0;                    //clear the input counter
+              ram_read.d = 0;                          //clear the ram read counter
+              user_input.d = 0; 
+              r4.d = d2500000;
+              state.d = state.WAIT_INPUT;
+           }else if(score.q > 70){
+              vram_wr_en = 0;
+              vram_refresh_ctr.d = 0;                  //reset the vram counter used
+              ram_write_counter.d = 0;                //reset the game ram counter
+              ram_write.d = 1;                        //clear the counter and then disable writting
+              input_counter.d = 0;                    //clear the input counter
+              ram_read.d = 0;                          //clear the ram read counter
+              user_input.d = 0; 
+              user_input.d = 0; 
+              r4.d = d1250000;
+              state.d = state.WAIT_INPUT;
+           }else{
+              vram_wr_en = 0;
+              vram_refresh_ctr.d = 0;                  //reset the vram counter used
+              ram_write_counter.d = 0;                //reset the game ram counter
+              ram_write.d = 1;                        //clear the counter and then disable writting
+              input_counter.d = 0;                    //clear the input counter
+              ram_read.d = 0;                          //clear the ram read counter
+              user_input.d = 0; 
+              user_input.d = 0; 
+              r4.d = d4000000;
+              state.d = state.WAIT_INPUT;
+            }
+            
           } 
 
 
@@ -742,12 +782,12 @@ module snake_fsm (
           vram_wr_en = 0;
             // Only update user_input register if a button has been pressed
             // Otherwise keep the previous direction
-            if(c{left_button, right_button, up_button, down_button} != 0){
+            if(c{left_button, right_button, up_button, down_button} != 0){            //update user_input if a button has been pressed
                 user_input.d = c{left_button, right_button, up_button, down_button};
             
             }
 
-            if(input_counter.q == DELAY_VAL){
+            if(input_counter.q == r4.q){                                        //delay counter
                 //user_input.d = c{12h0, left_button, right_button, up_button, down_button};
                 //direction_lut.dir_state = c{left_button, right_button, up_button, down_button,direction.q[3:0]};
                 //if(direction_lut.travel_dir != 4b0000){ // Only update new direction if the user press something
@@ -755,12 +795,10 @@ module snake_fsm (
                 //    direction.d = c{12h0, direction_lut.travel_dir};
                 //}
 
-                direction_lut.dir_state = c{direction.q[3:0], user_input.q[3:0]};
+                direction_lut.dir_state = c{direction.q[3:0], user_input.q[3:0]};    //concatenate 8bit data c{OLD_DIRECTION,NEW_DIRECTION},check against look up table to retrive actual travelling direction
                 
 
-                // Compute location of next head block
-
-              if(direction_lut.travel_dir == 4b1000 || direction_lut.travel_dir == 4b0010){
+              if(direction_lut.travel_dir == 4b1000 || direction_lut.travel_dir == 4b0010){    //if direction is left or up
                     //alu -1 / -34
                     alu.alufn = 6b000001; // Set ALU to MIN
                     alu.a = head_address.q; // Set input 'a' of ALU to current head_address
@@ -775,7 +813,7 @@ module snake_fsm (
 
               
 
-              }else if (direction_lut.travel_dir == 4b0100 || direction_lut.travel_dir == 4b0001){
+              }else if (direction_lut.travel_dir == 4b0100 || direction_lut.travel_dir == 4b0001){ //if direction is right or down
                     //alu 1 / 34
                     alu.alufn = 6b000000; // Set ALU to PLUS
                     alu.a = head_address.q; // Set input 'a' of ALU to current head_address
@@ -793,7 +831,7 @@ module snake_fsm (
                   alu.alufn = 6bz; 
               }
 
-              if(ram_addr > 951){
+              if(ram_addr > 951 ){ // if next head address overflows game memory, next state:GAME_OVER
                 state.d = state.GAMEOVER;
                 vram_refresh.d = 0;             //enable refresh
                 vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position 
@@ -812,7 +850,7 @@ module snake_fsm (
                   previous_head.d = head_address.q;
                   head_address.d = c{disp_game_mem.read_data[15:10],ram_addr[9:0]};    //update the actual address of the block
                   direction.d = c{12h0, direction_lut.travel_dir};
-                  state.d = state.COMPARE_STATE;
+                  state.d = state.COMPARE_STATE;                                        //next state = COMPARE_STATE
                   input_counter.d = 0;
                   ram_read.d = 0;
               
@@ -825,10 +863,14 @@ module snake_fsm (
           alu.b = 16bz;
           alu.alufn = 6bz; 
             }
-            //random.next=0;                              //random number generator set
             
         
-        state.COMPARE_STATE:
+        state.COMPARE_STATE:   
+            // block states
+            // 2b00 = empty block
+            // 2b01 = food
+            // 2b10 = wall 
+            //2b11 = snake body  
           direction_lut.dir_state = 16bz;
           alu.a = 16bz;
           alu.b = 16bz;
@@ -836,44 +878,41 @@ module snake_fsm (
           debugreg.d = 9;
           ram_wr_en = 0;
           vram_wr_en = 0;
-            // Possible block states
-            // 2b00 = empty block
-            // 2b01 = food
-            // 2b10/11 = wall/edge(snake)
-            if((head_address.q >= 0 && head_address.q <= 33 )&&(direction.q == 4b0001)){//down    
+            //border conditions to constraint play area
+            if((head_address.q[9:0] >= 0 && head_address.q[9:0] <= 33 )&&(direction.q == 4b0001)){//down    
                       state.d = state.GAMEOVER;
                       vram_refresh.d = 0;             //enable refresh
                       vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position                         
             }
-            else if((head_address.q >= 918 && head_address.q <= 951)&&(direction.q == 4b0010)){//up 
+            else if((head_address.q[9:0] >= 918 && head_address.q[9:0] <= 951)&&(direction.q == 4b0010)){//up 
                       state.d = state.GAMEOVER;
                       vram_refresh.d = 0;             //enable refresh
                       vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position                      
             }
-            else if((head_address.q - 34 * (head_address.q / 34) == 0)&&(direction.q == 4b0100)){//right    
+            else if((head_address.q[9:0] - 34 * (head_address.q[9:0] / 34) == 0)&&(direction.q == 4b0100)){//right    
                       state.d = state.GAMEOVER;
                       vram_refresh.d = 0;             //enable refresh
                       vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position                      
             }
-            else if((head_address.q - 34 * (head_address.q / 34) == 33) && (direction.q == 4b1000)){//left    
-                      state.d = state.GAMEOVER;
+            else if((head_address.q[9:0] - 34 * (head_address.q[9:0] / 34) == 33) && (direction.q == 4b1000)){//left    
+                     state.d = state.GAMEOVER;
                       vram_refresh.d = 0;             //enable refresh
-                      vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position
+                    vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position
             }
             else{
-              if(head_address.q[15:14] == 2b00){
+              if(head_address.q[15:14] == 2b00){                      //if next head address is empty, next state: KEEP_LENGTH
                 head_address.d = c{b110001,head_address.q[9:0]};      //new head after detection
                 
                 keep_length_counter.d = 0;
-                state.d = state.KEEP_LENGTH;
+                state.d = state.KEEP_LENGTH;                          
                 //update tail and all body blocks
               }
-              else if(head_address.q[15:14] == 2b01){
+              else if(head_address.q[15:14] == 2b01){                 //if next head address is fruit, next state: GROW
                 state.d = state.GROW;
                 ram_write_counter.d = 0;
                 //Update body blocks only
               }
-              else{
+              else {                                                  //if next head address is not valid, next state:GAME_OVER
                 state.d = state.GAMEOVER;
                 vram_refresh.d = 0;             //enable refresh
                 vram_refresh_ctr.d = DIE_POS;   //set the counter to the die position
@@ -948,14 +987,14 @@ module snake_fsm (
                 snake_length.d = snake_length.q + 1;
                 ram_wr_en = 1;
                 ram_addr = head_address.q[9:0];
-                ram_wr_data = c{2b11, 4b0001, 10h0};
+                ram_wr_data = c{2b11, 4b0001, 10h0};                //write new head address content to game ram
                 
                 ram_write_counter.d = 1;
             
               1:
                 ram_wr_en = 1;
                 ram_addr = previous_head.q[9:0];
-                ram_wr_data = c{2b11,4b0001, head_address.q[9:0]};
+                ram_wr_data = c{2b11,4b0001, head_address.q[9:0]};  //write new head address to the content of previous head address
                 ram_write_counter.d = 2;
             
               2:
@@ -963,7 +1002,7 @@ module snake_fsm (
                 vram_temp_reg_0.d =  c{2b11, 4b0001, head_address.q[9:0]};
                 vram_temp_reg.d[0] = c{2b11, 4b0001, head_address.q[9:0]};
                 //previous_head.d = head_address.q;
-                score.d = score.q + FRUIT_SCORE;
+                score.d = score.q + FRUIT_SCORE;                    //update score, next state: GEN_FRUIT
                 state.d = state.GEN_FRUIT;
                 random_num.d = random.num[9:0];
                 ram_write_counter.d = 0;
@@ -981,7 +1020,7 @@ module snake_fsm (
             if(~vram_refresh.q){
                 vram_wr_en = 1;
                 vram_wr_addr = vram_refresh_ctr.q;
-                vram_wr_data = OVER[vram_refresh_ctr.q-DIE_POS];
+                vram_wr_data = OVER[vram_refresh_ctr.q-DIE_POS];    //display string "GAME OVER"
                 vram_refresh_ctr.d = vram_refresh_ctr.q + 1;
                 if(vram_refresh_ctr.q == DIE_POS+DIE_LEN){
                     vram_refresh.d = 1;
@@ -993,7 +1032,7 @@ module snake_fsm (
                 vram_wr_data = 0;
             }
 
-            if (left_button||right_button||up_button||down_button){
+            if (left_button||right_button||up_button||down_button){  //if a button is pressed, next state: START_SCREEN
                 state.d = state.START_SCREEN;
                 vram_refresh.d = 0;
                 ram_clear.d = 0;
@@ -1001,7 +1040,6 @@ module snake_fsm (
                 ram_write.d = 1;
                 score.d = 0;
             }
-            //random.next=0;                              //random number generator set
 
 
         default:

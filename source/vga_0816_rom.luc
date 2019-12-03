@@ -18,6 +18,6 @@ module vga_0816_rom (
   );
   
   always {
-    row_of_pixels = (~ascii_code[7])? rom_007f.pixel: rom_80ff.pixel;
+    row_of_pixels = (~ascii_code[7])? rom_007f.pixel: rom_80ff.pixel;   //fetch the specific pixel
   }
 }
